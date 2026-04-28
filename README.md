@@ -5,6 +5,8 @@
 
 `vô vàn câu chuyện` · infinite tales
 
+🌐 **English** · [Tiếng Việt](./README.vi.md)
+
 ---
 
 ## What is this?
