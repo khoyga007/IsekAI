@@ -1,0 +1,70 @@
+IsekAI — progress notes (last updated 2026-04-29)
+====================================================
+
+For the full picture, read HANDOFF.md. This is just a quick scratchpad for
+"where we are right now" and "what to pick up next".
+
+DONE (Phase 6, this session)
+----------------------------
+[x] Aggressive prompt caching — message reorder + Anthropic 2 breakpoints +
+    Gemini stable/volatile split + OpenAI include_usage. ~85-95% cache hit
+    rate. ~5-10x effective input cost reduction on long campaigns.
+[x] Token usage chip on TopBar (input/output/cached %).
+[x] Multi-provider fallback chain — Settings.fallback, runs on primary failure
+    only when no chunks streamed yet. UI: chip on TopBar for 6s, F badge in
+    settings sidebar.
+[x] Retry button (InputBar) — undo + rerun last turn with same input.
+[x] Inline panel editing (StoryView) — hover ✏️ → textarea + speaker.
+[x] Avatar system — types, engine/avatars.ts (AniList + Pollinations + Nano
+    Banana 2), lib/avatar.tsx, components/AvatarPicker.tsx, integration into
+    Onboarding + StoryView + CastView.
+[x] Nano Banana 2 (gemini-2.5-flash-image) — auto-detected when Google API
+    key is set. ~$0.04/image. Async with spinner placeholders.
+[x] WorldBible sanitize fix in worldBuilder.ts (rules/factions/keyChars/HUD
+    widgets default to []).
+
+OPEN / NEXT UP
+--------------
+[ ] Verify avatar load works end-to-end. User showed sigil fallback for all
+    Pollinations URLs in earlier testing — Nano Banana path should resolve
+    that for users with a Google key, but needs human confirmation.
+[ ] Canon-rank HUD widget (Mức 1 from power-system discussion). Edit
+    HUD_SYS in worldBuilder.ts to mandate a stat-number widget for known
+    shonen-battle universes (Bounty / Rank / Grade / Hero Rank / Cursed
+    Energy Grade etc). ~15-30 min effort.
+[ ] WorldEditView avatar editor — let users re-pick avatars after creation.
+    Reuse AvatarPicker in "edit existing" mode.
+[ ] HUD op rollback on retry/undo — record inverse ops on Scene so undo
+    can revert HP deltas, item adds, affinity shifts.
+[ ] Bible auto-evolution — GM emits <bible-add type="..." name="..."
+    desc="..." /> to register newly-invented NPCs/factions/locations
+    persistently. Discussed but not built.
+
+KNOWN BUGS / WATCHLIST
+----------------------
+- Pollinations.ai sometimes fails to load images (Edge/Webview2 + slow
+  generation). User saw all 4 candidates fall back to procedural sigils.
+  Mitigations applied: removed loading="lazy", removed model=flux param,
+  strip diacritics, clip prompt to 280 chars. If still flaky, switch
+  fully to Nano Banana for users with Google key, OR add manual URL
+  paste fallback.
+- AvatarPicker only shows protagonist when bible.keyCharacters is empty.
+  AI sometimes skips key characters (saw on "Owari no Seraph" with OC
+  protagonist). Could be fixed by tightening BIBLE_SYS prompt to
+  mandate at least 3 key chars even when protagonist is OC.
+- Retry button does NOT roll back HUD ops (HP delta would apply twice).
+  Pre-existing limitation; documented but not fixed.
+
+DESIGN NOTES (carried from session discussion)
+----------------------------------------------
+- App identity: "manga writing studio" — hybrid between game (AI Dungeon)
+  and writing tool (Sudowrite). User confirmed hybrid is the sweet spot.
+  Rule of thumb when adding features: do they serve play OR craft? If
+  both → high priority. Edit/retry affordances are gated behind hover/
+  confirm so game-feel isn't disrupted.
+
+VERIFY COMMANDS
+---------------
+$ npx tsc --noEmit                # TypeScript check (clean as of save)
+$ dev.bat                         # tauri dev (HMR)
+$ build.bat                       # tauri bundle (msi/exe/nsis)
