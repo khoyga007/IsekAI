@@ -47,6 +47,7 @@ const DEFAULT: Settings = {
     zai: {},
     "9router": { model: "auto", baseUrl: "http://localhost:20128/v1" },
     ollama: { model: "llama3.2:3b", baseUrl: "http://localhost:11434" },
+    mock: { model: "mock:happy" },
   },
   ui: { lowFx: false, audio: false, audioVolume: 0.18, lang: "vi", typewriter: true },
 };

@@ -17,7 +17,8 @@ export type ProviderId =
   | "together"
   | "cerebras"
   | "zai"
-  | "9router";
+  | "9router"
+  | "mock";
 
 export type Role = "system" | "user" | "assistant";
 

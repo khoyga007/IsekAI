@@ -4,6 +4,7 @@ import { openai, deepseek, openrouter } from "./openai";
 import { google } from "./google";
 import { ollama } from "./ollama";
 import { groq, mistral, xai, together, cerebras, zai, nineRouter } from "./extras";
+import { mock } from "./mock";
 
 export * from "./types";
 
@@ -21,6 +22,7 @@ export const PROVIDERS: Record<ProviderId, Provider> = {
   zai,
   "9router": nineRouter,
   ollama,
+  mock,
 };
 
 export const PROVIDER_LIST: Provider[] = [
@@ -37,6 +39,7 @@ export const PROVIDER_LIST: Provider[] = [
   zai,
   nineRouter,
   ollama,
+  mock,
 ];
 
 export function getProvider(id: ProviderId): Provider {
