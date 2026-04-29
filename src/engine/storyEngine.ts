@@ -342,10 +342,10 @@ export function buildSystemPromptDynamic(c: Campaign): string {
   const huds = (c.hud?.widgets ?? []).map(w => {
     if (w.type === "stat-bar") return `  - ${w.id} (stat-bar "${w.label}"): ${w.value}/${w.max}`;
     if (w.type === "stat-number") return `  - ${w.id} (stat-number "${w.label}"): ${w.value}`;
-    if (w.type === "tag-list") return `  - ${w.id} (tag-list "${w.label}"): [${w.tags.join(", ")}]`;
-    if (w.type === "affinity") return `  - ${w.id} (affinity "${w.label}"): ${Object.entries(w.values).map(([k,v])=>`${k}=${v}`).join(", ") || "(empty)"}`;
-    if (w.type === "inventory") return `  - ${w.id} (inventory "${w.label}"): ${w.items.map(i => `${i.name}×${i.qty ?? 1}`).join(", ") || "(empty)"}`;
-    if (w.type === "note") return `  - ${w.id} (note "${w.label}"): ${w.body}`;
+    if (w.type === "tag-list") return `  - ${w.id} (tag-list "${w.label}"): [${(w.tags ?? []).join(", ")}]`;
+    if (w.type === "affinity") return `  - ${w.id} (affinity "${w.label}"): ${Object.entries(w.values ?? {}).map(([k,v])=>`${k}=${v}`).join(", ") || "(empty)"}`;
+    if (w.type === "inventory") return `  - ${w.id} (inventory "${w.label}"): ${(w.items ?? []).map(i => `${i.name}×${i.qty ?? 1}`).join(", ") || "(empty)"}`;
+    if (w.type === "note") return `  - ${w.id} (note "${w.label}"): ${w.body ?? ""}`;
     return "";
   }).filter(Boolean).join("\n");
 

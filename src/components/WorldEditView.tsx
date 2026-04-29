@@ -440,7 +440,7 @@ function WidgetEditor({ widget, onChange, onDelete }: { widget: HudWidget; onCha
               {widget.type === "tag-list" && (
                 <div>
                   <div className="text-[9px] tracking-widest uppercase mb-1" style={{ color: "var(--color-text-dim)" }}>Tags (comma-separated)</div>
-                  <input value={widget.tags.join(", ")} onChange={(e) => onChange({ ...widget, tags: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })} className={inputCls} style={inputStyle} />
+                  <input value={(widget.tags ?? []).join(", ")} onChange={(e) => onChange({ ...widget, tags: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })} className={inputCls} style={inputStyle} />
                 </div>
               )}
             </div>

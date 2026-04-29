@@ -1,8 +1,35 @@
 import { nanoid } from "nanoid";
 import { completeJSON } from "./chat";
 import { scrapeUrl } from "./scraper";
-import type { Campaign, HudSchema, PowerLevel, Source, WorldBible } from "@/state/types";
+import type { Campaign, HudSchema, HudWidget, PowerLevel, Source, WorldBible } from "@/state/types";
 import { useSettings } from "@/state/settings";
+
+/**
+ * Fill in missing inner fields on a HUD widget. AI sometimes returns a
+ * tag-list without `tags`, an inventory without `items`, etc. Without this,
+ * DynamicHud + buildSystemPromptDynamic crash on `.length` / `.map` / `.join`.
+ */
+function sanitizeWidget(w: any): HudWidget {
+  if (!w || typeof w !== "object") return w;
+  switch (w.type) {
+    case "stat-bar":
+      return { ...w, value: typeof w.value === "number" ? w.value : 0, max: typeof w.max === "number" ? w.max : 100 };
+    case "stat-number":
+      return { ...w, value: w.value ?? 0 };
+    case "tag-list":
+      return { ...w, tags: Array.isArray(w.tags) ? w.tags : [] };
+    case "affinity":
+      return { ...w, values: w.values && typeof w.values === "object" ? w.values : {} };
+    case "inventory":
+      return { ...w, items: Array.isArray(w.items) ? w.items : [] };
+    case "note":
+      return { ...w, body: typeof w.body === "string" ? w.body : "" };
+    default:
+      return w;
+  }
+}
+
+export { sanitizeWidget };
 
 function getLangNote(): string {
   const lang = useSettings.getState().ui.lang;
@@ -121,7 +148,7 @@ export async function buildCampaign(opts: BuildOptions): Promise<Campaign> {
     `World Bible:\n${JSON.stringify(bible)}`,
     { signal: opts.signal },
   );
-  const hud: HudSchema = { ...rawHud, widgets: rawHud.widgets ?? [] };
+  const hud: HudSchema = { ...rawHud, widgets: (rawHud.widgets ?? []).map(sanitizeWidget) };
 
   const diffNote = opts.difficulty === "hard"
     ? " The difficulty is HARD: the GM should be unforgiving, enemies tough, consequences severe."

@@ -3,6 +3,30 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 import { nanoid } from "nanoid";
 import type { Campaign, Scene, Panel, HudSchema, MemoryCrystal, SavePoint } from "./types";
 import type { ChatUsage, ProviderId } from "@/providers";
+import { sanitizeWidget } from "@/engine/worldBuilder";
+
+/**
+ * Heal a campaign loaded from disk: AI may have produced widgets/bibles
+ * with missing inner fields in older builds. Re-apply the same sanitizer
+ * we now use at build-time so legacy saves don't crash the renderer.
+ */
+function healCampaign(c: Campaign): Campaign {
+  return {
+    ...c,
+    bible: {
+      ...c.bible,
+      rules: c.bible?.rules ?? [],
+      factions: c.bible?.factions ?? [],
+      keyCharacters: c.bible?.keyCharacters ?? [],
+    },
+    hud: {
+      ...c.hud,
+      widgets: (c.hud?.widgets ?? []).map(sanitizeWidget),
+    },
+    scenes: c.scenes ?? [],
+    crystals: c.crystals ?? [],
+  };
+}
 
 const STORE_FILE = "campaigns.json";
 
@@ -110,6 +134,7 @@ export const useCampaign = create<CampaignStore>((set, get) => ({
       let current: Campaign | null = null;
       if (activeId && lib[activeId]) {
         current = (await s.get<Campaign>(`c:${activeId}`)) ?? null;
+        if (current) current = healCampaign(current);
       }
       set({ library: lib, current });
     } catch { /* ignore */ }
@@ -123,8 +148,9 @@ export const useCampaign = create<CampaignStore>((set, get) => ({
 
   async load(id) {
     const s = store();
-    const c = await s.get<Campaign>(`c:${id}`);
-    if (!c) return;
+    const raw = await s.get<Campaign>(`c:${id}`);
+    if (!raw) return;
+    const c = healCampaign(raw);
     await s.set("activeId", id);
     await s.save();
     set({ current: c, draft: null, streaming: false, lastUsage: null, lastFallback: null });

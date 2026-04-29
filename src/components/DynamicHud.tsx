@@ -140,12 +140,13 @@ function StatNumber({ w }: { w: StatNumberWidget }) {
 }
 
 function TagList({ w }: { w: TagListWidget }) {
+  const tags = w.tags ?? [];
   return (
     <div>
       <Header label={w.label} accent={w.accent} />
       <div className="flex flex-wrap gap-1.5">
-        {w.tags.length === 0 && <span className="text-[11px] opacity-40">—</span>}
-        {w.tags.map((t) => (
+        {tags.length === 0 && <span className="text-[11px] opacity-40">—</span>}
+        {tags.map((t) => (
           <span key={t} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "color-mix(in oklab, var(--color-paper) 8%, transparent)", border: "1px solid var(--color-border)" }}>
             {t}
           </span>
@@ -156,7 +157,7 @@ function TagList({ w }: { w: TagListWidget }) {
 }
 
 function Affinity({ w }: { w: AffinityWidget }) {
-  const entries = Object.entries(w.values);
+  const entries = Object.entries(w.values ?? {});
   return (
     <div>
       <Header label={w.label} accent={w.accent} />
@@ -190,12 +191,13 @@ function Affinity({ w }: { w: AffinityWidget }) {
 }
 
 function Inventory({ w }: { w: InventoryWidget }) {
+  const items = w.items ?? [];
   return (
     <div>
       <Header icon="package" label={w.label} accent={w.accent} />
       <div className="flex flex-col gap-1">
-        {w.items.length === 0 && <span className="text-[11px] opacity-40">empty</span>}
-        {w.items.map((it) => (
+        {items.length === 0 && <span className="text-[11px] opacity-40">empty</span>}
+        {items.map((it) => (
           <div key={it.name} className="flex items-center justify-between text-[11px]">
             <span style={{ color: "var(--color-paper)" }}>{it.name}</span>
             <span className="font-mono opacity-60">×{it.qty ?? 1}</span>
@@ -210,7 +212,7 @@ function Note({ w }: { w: NoteWidget }) {
   return (
     <div>
       <Header label={w.label} accent={w.accent} />
-      <div className="text-[11px] leading-relaxed" style={{ color: "var(--color-paper)" }}>{w.body}</div>
+      <div className="text-[11px] leading-relaxed" style={{ color: "var(--color-paper)" }}>{w.body ?? ""}</div>
     </div>
   );
 }
