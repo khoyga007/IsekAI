@@ -12,7 +12,7 @@
 - **Stack:** Tauri 2 (Rust shell) + React 19 + TypeScript + Vite 7 + Tailwind CSS v4
 - **Theme:** "Neo-Tokyo Ink" — cyberpunk neon × sumi-e ink wash. **No CJK glyphs** in UI (user explicitly disliked Japanese/Chinese decoration).
 - **Default UI language:** Vietnamese (`vi`). User is Vietnamese-speaking ("Yang"), addresses assistant as "em" (assistant) / "anh" (user).
-- **Image generation:** ✅ added 2026-04-29 — AniList canon fetch + Pollinations.ai (free) + Google Nano Banana 2 (paid, reuses Google API key). See Phase 6.
+- **Avatars:** AniList canon fetch (free) + procedural sigil fallback. AI image generation (Pollinations.ai, Google Nano Banana 2) was added 2026-04-29 in Phase 6 and **removed 2026-06-12** to keep the app strictly free to run.
 
 ### Run it
 
@@ -161,15 +161,15 @@ Both auto-run `npm install --legacy-peer-deps` if `node_modules\` missing. The `
 
 - **Avatar system** (NEW — `src/engine/avatars.ts`, `src/lib/avatar.tsx`, `src/components/AvatarPicker.tsx`)
   - **Types**: `Protagonist.avatar?: string` + `WorldBible.keyCharacters[].avatar?: string` (URL or `data:image/png;base64,...`)
-  - **3 sources**:
+  - **Sources** (as of 2026-06-12 — AI image gen removed, see below):
     1. **AniList GraphQL** — for canon characters. Free, no auth. Searches by `bible.title` (MANGA → ANIME → NOVEL fallback), takes top media's character list, fuzzy-matches each `keyCharacter.name` (exact / substring / last-name).
-    2. **Google Nano Banana 2** — `gemini-2.5-flash-image` model. Auto-detected when `settings.providers.google.apiKey` is set. POST to `:generateContent` with `responseModalities: ["IMAGE"]`, returns base64 → wrapped in data URL. ~$0.04/image. Async with parallel fan-out.
-    3. **Pollinations.ai** — free fallback. Deterministic URL by `(prompt, seed)`. URL format: `https://image.pollinations.ai/prompt/<encoded>?width=512&height=512&seed=N&nologo=true`. Diacritics stripped, prompt clipped to 280 chars.
+    2. **Procedural sigil** — FNV-hash gradient + initials, rendered locally by `lib/avatar.tsx`. Zero cost, zero network.
+  - ~~**Google Nano Banana 2** + **Pollinations.ai**~~ — **removed 2026-06-12** to keep the app strictly free to run (NB cost ~$0.04/image; Pollinations was free but flaky on WebView2). History: added 2026-04-29 in Phase 6. If gen is ever wanted again, see git history of `src/engine/avatars.ts` + `src/components/AvatarPicker.tsx` (commit "Initial commit: IsekAI through Phase 6" onward).
   - **Avatar component** (`src/lib/avatar.tsx`) — single source of truth. `<Avatar name url? size selected? onClick? />`. If `url` set, renders `<img>` with `referrerPolicy=no-referrer`; on error falls back to procedural FNV-hash gradient + initials. `lib/avatar.ts` is a re-export shim for backward compat.
-  - **AvatarPicker** — modal shown after `buildCampaign` returns but before `start`. Per-character row with horizontal candidate gallery (3 NB or 4 Poll). Click to select (vermillion ring), Regenerate adds 3-4 more, Skip clears. Pending Nano Banana gens render as amber spinner placeholders.
+  - **AvatarPicker** — modal shown after `buildCampaign` returns but before `start`, **canon sources only** (`title` / `url`). Per-character row showing the AniList canon match (pre-selected); click to toggle, SkipForward clears to sigil. Non-canon sources (`world` / `rng`) skip the picker entirely — Onboarding starts the campaign directly and everyone gets a sigil.
   - **Onboarding integration** — `pendingCampaign` state holds the built campaign while AvatarPicker is open. `finalize(avatars)` writes selected URLs back into protagonist + keyCharacters then `start()`s. `Skip — use sigils for everyone` and `Cancel` (return to form) supported.
   - **Display**: dialogue panel uses `useSpeakerAvatar` hook to look up speaker → avatar URL from campaign. CastView CharCard takes `avatar?: string` prop.
-  - **Cost preview**: 5 chars × 3 NB candidates = ~$0.60 init, +$0.12 per Regenerate. Pollinations is free.
+  - **Cost**: $0. AniList CDN URLs are free and effectively permanent.
 
 - **World Bible sanitize fix** (`src/engine/worldBuilder.ts`)
   - AI sometimes omits one of `rules` / `factions` / `keyCharacters` arrays → undefined → `.map()` crash in WorldEditView's `KeyCharEditor`
@@ -213,7 +213,7 @@ E:\IsekAI\
 │   │   ├── chat.ts                  # streamWithActive() w/ multi-provider fallback, completeJSON(), forgiving JSON parser, providerLabel()
 │   │   ├── worldBuilder.ts          # 3-stage build (Bible → HUD → Protagonist), URL scrape, sanitize arrays
 │   │   ├── storyEngine.ts           # XML-tag parser, system prompt builder (stable + dynamic split), playTurn(), applyHudOps()
-│   │   ├── avatars.ts               # ★ Phase 6: AniList GraphQL fetch, Pollinations URL gen, Nano Banana 2 (Gemini Image) gen
+│   │   ├── avatars.ts               # AniList GraphQL fetch + canon match (AI image gen removed 2026-06-12)
 │   │   └── scraper.ts               # Wikipedia REST + Fandom HTML strip
 │   │
 │   ├── lib\
@@ -268,7 +268,7 @@ E:\IsekAI\
 | Stable system + history-with-cache + dynamic + user (Phase 6) | Auto-prefix cachers (OpenAI/DS/xAI/Gemini-implicit) only cache up to first byte that differs. Putting volatile dynamic block AFTER history → history is in the cacheable prefix. Anthropic gets 2 explicit breakpoints (stable + last history) so cache rolls forward each turn. |
 | Fallback only when no chunks emitted (Phase 6) | A failed mid-stream provider has already shown text to the user; falling back would duplicate. Pre-stream errors (402, 401, network) are safe to retry on a fresh provider. |
 | Avatar URLs (incl. data URLs) persisted on character not in a separate store (Phase 6) | Keeps "all I need to render this campaign" inside the Campaign object → export, branch, restore all work without extra plumbing. Data URLs are large but bounded (~50-100KB per portrait). |
-| Avatar component falls back on `<img onError>` (Phase 6) | Network blip / Pollinations rate limit / AniList CDN hiccup → user still sees the procedural sigil rather than a broken-image icon. |
+| Avatar component falls back on `<img onError>` (Phase 6) | Network blip / AniList CDN hiccup → user still sees the procedural sigil rather than a broken-image icon. |
 
 ---
 
@@ -287,7 +287,6 @@ E:\IsekAI\
 - ⚠️ **WorldEditView cannot edit avatars** (Phase 6 deferred to v2). Once an avatar is picked at onboarding, can't change without recreating the campaign.
 - ⚠️ **Retry doesn't undo HUD ops** — `undoLastScene` rewinds scenes/crystals but `applyHudOps` is destructive. Retrying a turn that did `<hud op="delta" id="hp" value="-15"/>` will apply the delta a second time.
 - ⚠️ **Canon power systems not modeled structurally** — `bible.rules` captures lore, `powerLevel` is an absolute VS-Battles tier, but world-internal ranks (Bounty, Hokage rank, JJK Grade) aren't tracked. Discussed with user; "Mức 1" fix (HUD widget for canon rank) was proposed but not yet built.
-- ⚠️ Pollinations.ai is slow + occasionally fails to load — user paused mid-implementation. Nano Banana 2 is the recommended path when a Google key is set.
 
 ### Not started
 - TTS narration

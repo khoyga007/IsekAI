@@ -26,7 +26,7 @@ It's the kind of thing you build when you want both:
 |---|---|
 | **Worlds** | 4 source kinds — known title, custom world, Wiki/Fandom URL, surprise-me. AI builds a World Bible (genre, tone, rules, factions, key cast) + genre-fitting HUD + a protagonist (canon or OC). |
 | **Story** | XML-tag streaming — narrate / act / say / think / system panels render as the model writes. Per-turn `<scene mood beat>` retunes the backdrop and ambient audio. AI emits 3 quick-action chips below each turn. |
-| **Characters** | Avatar pipeline: AniList canon match → Google Nano Banana 2 (if Google API key set) → Pollinations.ai free fallback → procedural sigil. Per-NPC `register` + `tic` to keep voices distinct. |
+| **Characters** | Avatar pipeline: AniList canon match (free) → procedural sigil fallback. Per-NPC `register` + `tic` to keep voices distinct. |
 | **HUD** | 6 widget types (stat-bar, stat-number, tag-list, affinity, inventory, note) — AI invents the schema fitting your genre, then mutates it inline via `<hud op="…"/>` tags. |
 | **Memory** | Auto-pinned crystals for irreversible beats. Auto-summarization compresses old turns into context summaries when the prompt grows past ~5500 tokens. |
 | **Providers** | Anthropic, OpenAI, Google Gemini, OpenRouter, DeepSeek, Mistral, Groq, xAI, Together, Cerebras, Z.AI, Ollama. Aggressive cross-provider prompt caching (~85-95% hit rate after turn 2). Multi-provider fallback chain — if your primary 402's, the fallback takes over automatically. |
@@ -42,7 +42,7 @@ It's the kind of thing you build when you want both:
 - **State**: Zustand + Tauri LazyStore (persisted JSON in `%APPDATA%`)
 - **Streaming**: SSE + NDJSON, custom XML-tag parser that flushes panels live
 - **Audio**: Web Audio API (zero asset weight, zero copyright)
-- **Image gen**: AniList GraphQL + Pollinations.ai + Google Gemini 2.5 Flash Image (Nano Banana 2)
+- **Avatars**: AniList GraphQL (canon portraits) + procedural SVG sigils — no AI image generation, $0
 
 ---
 
@@ -67,8 +67,7 @@ npm run tauri build   # cross-platform
 1. Launch the app → Settings (gear icon, bottom of side rail)
 2. Pick a provider, paste your API key
 3. *(Optional)* Set a fallback provider — the app will switch automatically if the primary fails
-4. *(Optional, recommended)* Add a Google API key to unlock **Nano Banana 2** for high-quality avatar generation
-5. Close Settings → click any of the 4 source cards on the landing screen → start your campaign
+4. Close Settings → click any of the 4 source cards on the landing screen → start your campaign
 
 ### Where data lives
 
@@ -86,7 +85,7 @@ The app calls AI providers directly from your machine — no relay server, no te
 | Provider | Why |
 |---|---|
 | **Anthropic** Claude Sonnet/Opus | Best prose quality. Explicit prompt caching → cheapest on long campaigns. |
-| **Google Gemini** 2.5 Pro/Flash | Free implicit caching. Long context. Pairs with Nano Banana 2 for image gen. |
+| **Google Gemini** 2.5 Pro/Flash | Free implicit caching. Long context. Generous free tier. |
 | **OpenRouter** | Single key for many models. Routes to Anthropic / Gemini / OpenAI / DeepSeek / etc. |
 | **DeepSeek** V3 | Cheapest competent prose. Auto prefix cache. |
 | **Ollama** | Run a local model (no API cost, private). |
@@ -142,7 +141,5 @@ Personal project. Not yet licensed for redistribution. If you want to use this s
 ## Acknowledgements
 
 - **AniList** — free GraphQL API for canon character images
-- **Pollinations.ai** — free anonymous image generation
-- **Google** — Gemini 2.5 Flash Image ("Nano Banana 2")
 - **Tauri** team — for making "Electron but Rust + native" actually pleasant to ship
 - The roleplay text-adventure tradition — AI Dungeon, KoboldAI, NovelAI, etc. — for showing what's possible

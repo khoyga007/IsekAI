@@ -26,7 +26,7 @@ export interface WorldBible {
     register?: string;
     /** A short verbal tic — a phrase, filler, or sentence-starting/ending habit the AI should reuse to make the character recognizable. */
     tic?: string;
-    /** Avatar URL (AniList CDN, Pollinations gen, or user-uploaded data URL). */
+    /** Avatar URL (AniList CDN or user-uploaded data URL). */
     avatar?: string;
   }[];
 }
@@ -54,7 +54,7 @@ export interface Protagonist {
   powerLevel?: PowerLevel;
   /** Freeform power description, used when powerLevel === "custom". */
   powerCustom?: string;
-  /** Avatar URL (AniList CDN, Pollinations gen, or user-uploaded data URL). */
+  /** Avatar URL (AniList CDN or user-uploaded data URL). */
   avatar?: string;
 }
 

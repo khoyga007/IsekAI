@@ -1,32 +1,20 @@
 /**
  * AvatarPicker — shown after `buildCampaign` returns a fresh world but before
  * the campaign is started. For each named character (protagonist + key cast),
- * we surface a horizontal gallery of candidate portraits. The user clicks the
- * one they want, hits "Regenerate" for more, or skips to fall back to the
- * procedural initials sigil.
+ * we surface the AniList canon portrait (if the source is a known media title).
+ * The user keeps it, or clears it to fall back to the procedural initials
+ * sigil.
  *
- * Sources of candidates (in priority order):
- *   1. **AniList** for known media — sync URL for canon match (if any).
- *   2. **Nano Banana** (Google Gemini Image) — async, ~$0.04/image, requires
- *      Google API key. Returns base64 data URL. High quality.
- *   3. **Pollinations.ai** — sync deterministic URL, free, no key. Used as
- *      fallback when Google key is absent. "Regenerate" shifts seed range.
- *
- * Async gens run in parallel; spinners render alongside resolved candidates.
+ * Only source of candidates is **AniList** — free public CDN URLs for canon
+ * characters. AI image generation (Nano Banana, Pollinations) was removed
+ * 2026-06-12 to keep the app strictly free to run. Non-canon sources skip
+ * this picker entirely (see Onboarding).
  */
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2, RefreshCw, X, ArrowRight, SkipForward, Sparkles } from "lucide-react";
+import { Loader2, X, ArrowRight, SkipForward } from "lucide-react";
 import { Avatar } from "@/lib/avatar";
-import {
-  buildPortraitPrompt,
-  fetchAniListCast,
-  generateCandidates,
-  generateNanoBananaImage,
-  isCanonSource,
-  matchCanonAvatar,
-} from "@/engine/avatars";
-import { useSettings } from "@/state/settings";
+import { fetchAniListCast, isCanonSource, matchCanonAvatar } from "@/engine/avatars";
 import type { Campaign, SourceKind } from "@/state/types";
 
 interface CharSlot {
@@ -36,8 +24,6 @@ interface CharSlot {
   name: string;
   /** Subtitle (role label). */
   role: string;
-  /** Description (used for portrait prompt). */
-  desc: string;
   /** Already-pre-set avatar from world builder, if any. */
   initialAvatar?: string;
   /** Index into the protagonist or bible.keyCharacters[] array. */
@@ -45,14 +31,10 @@ interface CharSlot {
 }
 
 interface SlotState {
-  /** Resolved candidate URLs (AniList CDN, Pollinations, or data URLs). */
+  /** Resolved candidate URLs (AniList CDN or pre-set avatar). */
   candidates: string[];
-  /** Number of in-flight Nano Banana generations — render this many spinner placeholders. */
-  pending: number;
-  /** Index into candidates that the user picked, or null = no avatar. */
+  /** Index into candidates that the user picked, or null = no avatar (sigil). */
   selected: number | null;
-  /** Seed offset for "Regenerate" with Pollinations — each click shifts to fresh seeds. */
-  seedOffset: number;
   /** True while waiting for AniList fetch. */
   loading: boolean;
 }
@@ -66,18 +48,12 @@ interface Props {
 }
 
 export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel }: Props) {
-  const googleApiKey = useSettings((s) => s.providers.google.apiKey);
-  const useNanoBanana = !!googleApiKey;
-  /** Per-batch count: 3 for Nano Banana (paid) is plenty; 4 for Pollinations (free). */
-  const PER_BATCH = useNanoBanana ? 3 : 4;
-
   const slots: CharSlot[] = useMemo(() => {
     const out: CharSlot[] = [
       {
         key: "@protagonist",
         name: campaign.protagonist.name,
         role: campaign.protagonist.role,
-        desc: campaign.protagonist.description,
         initialAvatar: campaign.protagonist.avatar,
         charIdx: -1,
       },
@@ -87,7 +63,6 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
         key: kc.name,
         name: kc.name,
         role: kc.role,
-        desc: kc.desc,
         initialAvatar: kc.avatar,
         charIdx: i,
       });
@@ -102,105 +77,39 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
     for (const s of slots) {
       init[s.key] = {
         candidates: s.initialAvatar ? [s.initialAvatar] : [],
-        pending: 0,
         selected: s.initialAvatar ? 0 : null,
-        seedOffset: 0,
         loading: canon,
       };
     }
     return init;
   });
 
-  /** Build a portrait prompt for a slot — single source of truth used by both
-   *  the initial mount and the Regenerate button. */
-  function promptFor(slot: CharSlot): string {
-    return buildPortraitPrompt({
-      name: slot.name,
-      description: slot.desc,
-      role: slot.role,
-      worldGenre: campaign.bible.genre,
-      worldTone: campaign.bible.tone,
-    });
-  }
-
-  /** Fire `count` Nano Banana generations for one slot in parallel; resolves
-   *  each into the candidates array as it completes (no await for batch). */
-  function fireNanoBananaGens(slot: CharSlot, count: number, signal?: AbortSignal): void {
-    if (!googleApiKey) return;
-    const prompt = promptFor(slot);
-    setState((p) => ({ ...p, [slot.key]: { ...p[slot.key], pending: p[slot.key].pending + count } }));
-    for (let i = 0; i < count; i++) {
-      generateNanoBananaImage(prompt, googleApiKey, { signal })
-        .then((dataUrl) => {
-          setState((p) => ({
-            ...p,
-            [slot.key]: {
-              ...p[slot.key],
-              candidates: [...p[slot.key].candidates, dataUrl],
-              pending: Math.max(0, p[slot.key].pending - 1),
-            },
-          }));
-        })
-        .catch((err) => {
-          console.warn(`[AvatarPicker] Nano Banana failed for ${slot.name}:`, err);
-          setState((p) => ({
-            ...p,
-            [slot.key]: { ...p[slot.key], pending: Math.max(0, p[slot.key].pending - 1) },
-          }));
-        });
-    }
-  }
-
-  /** Append `count` Pollinations URLs synchronously. */
-  function appendPollinations(slot: CharSlot, count: number, offset: number): void {
-    const prompt = promptFor(slot);
-    const fresh = generateCandidates(prompt, count, offset);
-    setState((p) => ({
-      ...p,
-      [slot.key]: {
-        ...p[slot.key],
-        candidates: [...p[slot.key].candidates, ...fresh],
-        seedOffset: offset,
-      },
-    }));
-  }
-
-  // Kick off AniList fetch (canon only), then seed the initial candidate list
-  // per slot via either Nano Banana (async) or Pollinations (sync).
+  // Kick off AniList fetch (canon only) and surface a canon match per slot.
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
       const anilistCast = canon ? await fetchAniListCast(campaign.bible.title, ac.signal) : [];
       if (ac.signal.aborted) return;
 
-      // Mark AniList loading done up-front, even before per-slot gens finish.
       setState((prev) => {
         const next: Record<string, SlotState> = {};
-        for (const k of Object.keys(prev)) next[k] = { ...prev[k], loading: false };
+        for (const slot of slots) {
+          const cur = prev[slot.key];
+          // Slots already populated with an initial avatar keep it (rare).
+          if (cur.candidates.length > 0 && cur.selected !== null) {
+            next[slot.key] = { ...cur, loading: false };
+            continue;
+          }
+          const canonHit = canon ? matchCanonAvatar(slot.name, anilistCast) : null;
+          next[slot.key] = {
+            candidates: canonHit ? [canonHit, ...cur.candidates] : cur.candidates,
+            // Pre-select the canon match — most users want it.
+            selected: canonHit ? 0 : cur.selected,
+            loading: false,
+          };
+        }
         return next;
       });
-
-      for (const slot of slots) {
-        // Skip slots already populated with an initial avatar (rare).
-        const existing = state[slot.key];
-        if (existing && existing.candidates.length > 0 && existing.selected !== null) continue;
-
-        // 1. Try canon match — sync URL, no cost.
-        const canonHit = canon ? matchCanonAvatar(slot.name, anilistCast) : null;
-        if (canonHit) {
-          setState((p) => ({
-            ...p,
-            [slot.key]: { ...p[slot.key], candidates: [canonHit, ...p[slot.key].candidates] },
-          }));
-        }
-
-        // 2. Add gen candidates.
-        if (useNanoBanana) {
-          fireNanoBananaGens(slot, PER_BATCH, ac.signal);
-        } else {
-          appendPollinations(slot, PER_BATCH, 0);
-        }
-      }
     })();
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,15 +117,6 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
 
   function selectCandidate(key: string, idx: number) {
     setState((p) => ({ ...p, [key]: { ...p[key], selected: p[key].selected === idx ? null : idx } }));
-  }
-
-  function regenerate(slot: CharSlot) {
-    if (useNanoBanana) {
-      fireNanoBananaGens(slot, PER_BATCH);
-    } else {
-      const nextOffset = state[slot.key].seedOffset + 1;
-      appendPollinations(slot, PER_BATCH, nextOffset);
-    }
   }
 
   function clearSelection(key: string) {
@@ -246,25 +146,10 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 flex-shrink-0">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="text-[10px] tracking-[0.4em] uppercase" style={{ color: "var(--color-text-dim)" }}>Choose Avatars</div>
-            {useNanoBanana && (
-              <span
-                className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded tracking-widest"
-                style={{ background: "color-mix(in oklab, var(--color-amber) 15%, transparent)", color: "var(--color-amber)" }}
-                title="Using Google Nano Banana for high-quality generation. ~$0.04 per image."
-              >
-                <Sparkles size={9} /> NANO BANANA
-              </span>
-            )}
-          </div>
+          <div className="text-[10px] tracking-[0.4em] uppercase" style={{ color: "var(--color-text-dim)" }}>Choose Avatars</div>
           <h2 className="font-display text-xl mt-0.5 truncate">{campaign.bible.title}</h2>
           <p className="text-xs mt-1" style={{ color: "var(--color-text-dim)" }}>
-            {useNanoBanana
-              ? "Nano Banana gens take ~3-5s each. AniList tries first for canon characters; pick or regenerate."
-              : canon
-              ? "Canon characters get matches from AniList; Pollinations alternatives are free but lower quality."
-              : "Pollinations gens are free. Add a Google API key in Settings for Nano Banana quality."}
+            Canon characters get their portrait from AniList (free). Characters without a match use a procedural sigil.
           </p>
         </div>
         <button onClick={onCancel} className="grid place-items-center w-9 h-9 rounded-lg glass hover:glass-hi transition">
@@ -295,8 +180,8 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
                     <span>Looking up canon portrait…</span>
                   </div>
                 )}
-                {!st.loading && st.candidates.length === 0 && st.pending === 0 && (
-                  <span className="text-[11px] italic px-3" style={{ color: "var(--color-text-dim)" }}>No candidates yet — click Regenerate.</span>
+                {!st.loading && st.candidates.length === 0 && (
+                  <span className="text-[11px] italic px-3" style={{ color: "var(--color-text-dim)" }}>No canon match — procedural sigil will be used.</span>
                 )}
                 {st.candidates.map((url, i) => (
                   <Avatar
@@ -308,38 +193,17 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
                     onClick={() => selectCandidate(slot.key, i)}
                   />
                 ))}
-                {/* Pending spinner placeholders for in-flight Nano Banana gens */}
-                {Array.from({ length: st.pending }).map((_, i) => (
-                  <div
-                    key={`pending-${i}`}
-                    className="grid place-items-center flex-shrink-0"
-                    style={{
-                      width: 72, height: 72, borderRadius: "9999px",
-                      background: "color-mix(in oklab, var(--color-amber) 8%, transparent)",
-                      boxShadow: "inset 0 0 0 1px color-mix(in oklab, var(--color-amber) 30%, transparent)",
-                    }}
-                    title="Generating with Nano Banana…"
+                {st.candidates.length > 0 && (
+                  <button
+                    onClick={() => clearSelection(slot.key)}
+                    title="Use procedural sigil instead"
+                    disabled={st.selected === null}
+                    className="grid place-items-center w-9 h-9 rounded-lg glass hover:glass-hi transition flex-shrink-0 disabled:opacity-30"
+                    style={{ color: "var(--color-text-dim)" }}
                   >
-                    <Loader2 size={18} className="animate-spin" style={{ color: "var(--color-amber)" }} />
-                  </div>
-                ))}
-                <button
-                  onClick={() => regenerate(slot)}
-                  title={useNanoBanana ? `Generate ${PER_BATCH} more (Nano Banana, ~$0.04 each)` : `Generate ${PER_BATCH} more variants (free)`}
-                  className="ml-1 grid place-items-center w-9 h-9 rounded-lg glass hover:glass-hi transition flex-shrink-0"
-                  style={{ color: "var(--color-violet)" }}
-                >
-                  <RefreshCw size={13} />
-                </button>
-                <button
-                  onClick={() => clearSelection(slot.key)}
-                  title="Use procedural sigil instead"
-                  disabled={st.selected === null}
-                  className="grid place-items-center w-9 h-9 rounded-lg glass hover:glass-hi transition flex-shrink-0 disabled:opacity-30"
-                  style={{ color: "var(--color-text-dim)" }}
-                >
-                  <SkipForward size={13} />
-                </button>
+                    <SkipForward size={13} />
+                  </button>
+                )}
               </div>
             </div>
           );

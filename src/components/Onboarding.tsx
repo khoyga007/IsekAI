@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, BookText, Globe2, Sparkles, Wand2, ArrowRight } from "lucide-react";
 import type { Campaign, PowerLevel, SourceKind } from "@/state/types";
 import { buildCampaign, type Difficulty } from "@/engine/worldBuilder";
+import { isCanonSource } from "@/engine/avatars";
 import { suggestPowerLevelFromText } from "@/engine/storyEngine";
 import { useCampaign } from "@/state/campaign";
 import { useSettings } from "@/state/settings";
@@ -101,8 +102,17 @@ export function Onboarding({ open, initialKind = "title", onClose, onOpenSetting
         powerLevel,
         powerCustom: powerLevel === "custom" ? powerCustom.trim() : undefined,
       });
-      // Hand off to AvatarPicker — the caller will finalize via finalize() below.
-      setPendingCampaign(campaign);
+      if (isCanonSource(kind)) {
+        // Hand off to AvatarPicker — the caller will finalize via finalize() below.
+        setPendingCampaign(campaign);
+      } else {
+        // No canon source → AniList has nothing to offer and there is no AI
+        // image generation anymore, so the picker would be empty. Start
+        // directly; everyone gets a procedural sigil.
+        await start(campaign);
+        onClose();
+        reset();
+      }
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     } finally {
