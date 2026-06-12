@@ -194,10 +194,23 @@ const EN: Dict = {
   "saves.atTurn": "at turn",
   "saves.noCampaign": "No campaign loaded.",
 
+  // Continue to next part
+  "sequel.title": "Continue to Part 2",
+  "sequel.desc": "Generate an editable recap, then spin this campaign into a fresh next part with a clean scene log. The new part keeps the world, protagonist, HUD state, and this recap.",
+  "sequel.generating": "Generating recap…",
+  "sequel.recap.label": "Recap for the next part",
+  "sequel.recap.placeholder": "Generate or write the recap that Part 2 should remember…",
+  "sequel.btn.regen": "Regenerate",
+  "sequel.btn.create": "Create next part",
+  "sequel.confirm": "Create the next part from this recap? The current campaign stays saved in your library.",
+  "sequel.noCampaign": "No campaign loaded.",
+  "sequel.empty": "This campaign has no story turns yet.",
+
   // Topbar buttons
   "btn.export": "Export to Markdown",
   "btn.close": "Close (return to library)",
   "btn.bookmark": "Bookmark this turn",
+  "btn.sequel": "Continue to Part 2",
   "btn.audio.on": "Disable ambient audio",
   "btn.audio.off": "Enable ambient audio",
   "confirm.close": "Close this campaign? It stays saved in your library.",
@@ -448,10 +461,23 @@ const VI: Dict = {
   "saves.atTurn": "tại lượt",
   "saves.noCampaign": "Chưa tải chiến dịch nào.",
 
+  // Continue to next part
+  "sequel.title": "Tiếp Tục Sang Phần 2",
+  "sequel.desc": "Tạo một bản tóm tắt có thể chỉnh sửa, rồi tách chiến dịch này sang phần tiếp theo với nhật ký cảnh mới sạch. Phần mới giữ thế giới, nhân vật chính, trạng thái HUD, và bản tóm tắt này.",
+  "sequel.generating": "Đang tạo tóm tắt…",
+  "sequel.recap.label": "Tóm tắt cho phần tiếp theo",
+  "sequel.recap.placeholder": "Tạo hoặc viết bản tóm tắt mà Phần 2 cần ghi nhớ…",
+  "sequel.btn.regen": "Tạo lại",
+  "sequel.btn.create": "Tạo phần tiếp",
+  "sequel.confirm": "Tạo phần tiếp theo từ bản tóm tắt này? Chiến dịch hiện tại vẫn được lưu trong thư viện.",
+  "sequel.noCampaign": "Chưa tải chiến dịch nào.",
+  "sequel.empty": "Chiến dịch này chưa có lượt truyện nào.",
+
   // Topbar buttons
   "btn.export": "Xuất ra Markdown",
   "btn.close": "Đóng (về thư viện)",
   "btn.bookmark": "Đánh dấu lượt này",
+  "btn.sequel": "Tiếp tục sang Phần 2",
   "btn.audio.on": "Tắt âm thanh nền",
   "btn.audio.off": "Bật âm thanh nền",
   "confirm.close": "Đóng chiến dịch này? Nó vẫn được lưu trong thư viện.",

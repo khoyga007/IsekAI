@@ -85,6 +85,11 @@ interface CampaignStore {
   branchBookmark(id: string): Promise<void>;
   /** Remove a bookmark (does not affect scenes). */
   deleteBookmark(id: string): Promise<void>;
+
+  /** Spin the current campaign into a fresh "Part N+1" campaign:
+   *  same bible / protagonist / HUD state, empty scenes & crystals,
+   *  carrying the given recap of everything that happened so far. */
+  createSequel(recap: string): Promise<void>;
 }
 
 let _store: LazyStore | null = null;
@@ -325,6 +330,33 @@ export const useCampaign = create<CampaignStore>((set, get) => ({
     };
     set({ current: branched, draft: null, streaming: false, library: { ...get().library, [branched.id]: summarize(branched) } });
     await persistCampaign(branched);
+  },
+
+  async createSequel(recap) {
+    const cur = get().current;
+    if (!cur) return;
+    const { useSettings } = await import("./settings");
+    const lang = useSettings.getState().ui.lang;
+    const partWord = lang === "vi" ? "Phần" : "Part";
+    const nextPart = (cur.part ?? 1) + 1;
+    // Strip a previous part suffix so Part 3 doesn't become "… — Phần 2 — Phần 3".
+    const baseTitle = cur.bible.title.replace(/\s*—\s*(?:Part|Phần)\s+\d+$/iu, "");
+    const sequel: Campaign = {
+      ...cur,
+      id: nanoid(10),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      bible: { ...cur.bible, title: `${baseTitle} — ${partWord} ${nextPart}` },
+      // Fresh story; HUD is intentionally kept as-is — it IS the carried state.
+      scenes: [],
+      crystals: [],
+      bookmarks: [],
+      recap: recap.trim(),
+      part: nextPart,
+      prevId: cur.id,
+    };
+    set({ current: sequel, draft: null, streaming: false, lastUsage: null, library: { ...get().library, [sequel.id]: summarize(sequel) } });
+    await persistCampaign(sequel);
   },
 
   async deleteBookmark(id) {

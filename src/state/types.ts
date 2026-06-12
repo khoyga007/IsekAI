@@ -176,4 +176,12 @@ export interface Campaign {
   crystals: MemoryCrystal[];
   /** User-pinned save points. Optional for backwards compat with older campaigns. */
   bookmarks?: SavePoint[];
+  /** LLM-condensed recap of the previous part — present only on sequel campaigns.
+   *  Injected into the stable system prompt so Part N+1 starts with full
+   *  knowledge of Part N at a fraction of the token cost. */
+  recap?: string;
+  /** 1-based part number. Undefined = Part 1 (original campaign). */
+  part?: number;
+  /** Campaign id of the previous part, for provenance. */
+  prevId?: string;
 }

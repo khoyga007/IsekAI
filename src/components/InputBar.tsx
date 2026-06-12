@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Dices, Square, Undo2, Swords, FastForward, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useCampaign } from "@/state/campaign";
-import { playTurn, parseStory, applyHudOps } from "@/engine/storyEngine";
+import { playTurn, parseStory, applyHudOps, applyBibleAdds } from "@/engine/storyEngine";
 import { DiceRoller } from "./DiceRoller";
 import { useT } from "@/lib/i18n";
 import { suggestSkillCheck, rollSkillCheck, formatSkillCheck } from "@/lib/skillCheck";
@@ -84,10 +84,11 @@ export function InputBar() {
       });
 
       setDraftPanels(parsed.panels);
-      const after = applyHudOps(c, parsed.hudOps);
+      const afterHud = applyHudOps(c, parsed.hudOps);
+      const afterBible = applyBibleAdds(afterHud, parsed.bibleAdds);
       await commitTurn(input ?? undefined, undefined, { suggestions: parsed.suggestions, mood: parsed.mood, beat: parsed.beat });
-      if (parsed.hudOps.length) {
-        useCampaign.setState({ current: { ...after, scenes: useCampaign.getState().current!.scenes } });
+      if (parsed.hudOps.length > 0 || parsed.bibleAdds.length > 0) {
+        useCampaign.setState({ current: { ...afterBible, scenes: useCampaign.getState().current!.scenes } });
       }
       for (const cr of parsed.crystals) {
         await addCrystal({ turn: useCampaign.getState().current!.scenes.length - 1, title: cr.title, summary: cr.summary });

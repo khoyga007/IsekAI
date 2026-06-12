@@ -21,7 +21,7 @@ import { useSettings } from "@/state/settings";
 const STORY_SYS = `You are the Game Master of an IsekAI roleplay session. You narrate, voice every character, and react to the player while staying true to the World Bible.
 
 ═══ OUTPUT FORMAT ═══
-Use ONLY these XML-ish tags. No markdown, no prose outside tags. NEVER nest tags — place them sequentially.
+CRITICAL: You MUST wrap EVERY SINGLE SENTENCE in an XML tag. NEVER output plain text without a tag. No markdown. Place them sequentially.
 
   <narrate>Third-person, sensory, present-tense.</narrate>
   <act>A concise physical beat.</act>
@@ -35,6 +35,7 @@ Inline between panels — HUD ops and memory pins:
   <hud op="affinity" id="<existing-id>" name="Rinka" value="+5"/>
   <hud op="item-add|item-remove" id="<existing-id>" name="Iron Sword" qty="1"/>
   <crystal title="..." summary="..."/>
+  <bible-add type="character|faction|rule" name="..." desc="..."/>
 
 End EVERY turn with exactly ONE <scene/> + 3 <suggest>:
   <scene mood="..." beat="..."/>
@@ -50,6 +51,7 @@ End EVERY turn with exactly ONE <scene/> + 3 <suggest>:
 5. Honor the World Bible. If the world forbids it, narrate the failure.
 6. HUD: only update when state materially changed. Use ONLY ids in CURRENT HUD STATE — inventing ids no-ops. Don't track stats the schema doesn't have; narrate them.
 7. <crystal> at most once per 3-5 turns, only for irreversible beats (first meeting that matters, oath, death, betrayal, major reveal).
+   <bible-add> ONLY for major recurring characters/factions/rules invented mid-game. NEVER use for throwaway entities.
 8. Both <scene> attrs MUST come from the enums above; do not invent values.
 9. Aim for 4-8 panels per turn. Quality over quantity.
 
@@ -291,6 +293,20 @@ export function buildSystemPromptStable(c: Campaign): string {
       }\n`
     : "";
 
+  // Sequel campaigns carry a condensed recap of the previous part. It lives
+  // in the STABLE block so it's cached, and it outranks the generic opening
+  // instructions: the GM must continue the story, not restart it.
+  const recapBlock = c.recap?.trim()
+    ? `\n═══ PREVIOUSLY — RECAP OF PART ${(c.part ?? 2) - 1} ═══
+${c.recap.trim()}
+
+═══ CONTINUATION RULES (this campaign is PART ${c.part ?? 2} of an ongoing story) ═══
+- HONOR every fact in the recap: deaths stay dead, relationships and promises carry over, items and abilities persist.
+- Known characters are NOT strangers — no re-introductions, no amnesia.
+- The opening turn re-grounds the player in "where we left off" (time may have passed — say how much), then pushes FORWARD into a new arc. Do not re-tell Part ${(c.part ?? 2) - 1}.
+- Unresolved threads from the recap are your fuel — pay them off or escalate them.\n`
+    : "";
+
   return `${sys}
 
 ═══ HISTORY FORMAT NOTE ═══
@@ -300,7 +316,7 @@ Past assistant turns in this conversation are shown in a COMPACT plain-text form
   Name: "..."         → say
   (Name: ...)         → think
   ~ italic ~          → system note
-You MUST still emit your NEW response using the FULL XML tag format defined above. Do NOT mimic the compact format.
+WARNING: You are the GM. You MUST NOT mimic this compact format in your NEW output. You MUST use FULL XML TAGS (e.g. <say>, <act>) for your current turn! Any output without tags is a violation!
 
 ═══ WORLD BIBLE ═══
 Title: ${c.bible.title}
@@ -326,7 +342,7 @@ ${(c.bible?.keyCharacters ?? []).map(k => {
 ═══ PROTAGONIST (the player controls this character) ═══
 ${c.protagonist.name} — ${c.protagonist.role}
 ${c.protagonist.description}
-${hintBlock}
+${hintBlock}${recapBlock}
 ${buildPowerBlock(c)}`;
 }
 
@@ -374,13 +390,20 @@ export function buildSystemPrompt(c: Campaign): string {
 
 /* ---------- Streaming parser ---------- */
 
-const TAG_RE = /<(\/?)(narrate|act|say|think|system|hud|crystal|suggest|scene)([^>]*)(\/?)>/gi;
+const TAG_RE = /<(\/?)(narrate|act|say|think|system|hud|crystal|suggest|scene|bible-add)([^>]*)(\/?)>/gi;
 const ATTR_RE = /(\w+)\s*=\s*"([^"]*)"/g;
+
+export interface BibleAddOp {
+  type: "character" | "faction" | "rule";
+  name: string;
+  desc: string;
+}
 
 export interface ParsedDoc {
   panels: Panel[];
   hudOps: HudOp[];
   crystals: { title: string; summary: string }[];
+  bibleAdds: BibleAddOp[];
   suggestions: string[];
   mood?: string;
   beat?: string;
@@ -393,11 +416,96 @@ export type HudOp =
   | { op: "item-add"; id: string; name: string; qty?: number }
   | { op: "item-remove"; id: string; name: string };
 
+/**
+ * If the model ignores the XML instructions and spits out the compact history
+ * format (e.g. Gemini 3.1 Pro sometimes does this), we proactively heal it
+ * back into XML tags so the parser can handle it properly.
+ */
+function healCompactFormat(raw: string): string {
+  if (/<(narrate|act|say|think|system)[\s>]/i.test(raw)) return raw;
+  let out = raw;
+  out = out.replace(/\[([^\]]+)\]/g, "<act>$1</act>");
+  out = out.replace(/([^\.\!\?\n:]{2,50}):\s*"{1,2}(.*?)"{1,2}/g, (_, speaker, text) => `<say speaker="${speaker.trim()}">${text.trim()}</say>`);
+  out = out.replace(/\(([^\.\!\?\n:]{2,50}):\s*([^)]+?)\)/g, (_, speaker, text) => `<think speaker="${speaker.trim()}">${text.trim()}</think>`);
+  out = out.replace(/~\s*([^~]+?)\s*~/g, "<system>$1</system>");
+
+  // Heal split dialogue: <say speaker="X">...</say> — action — "more dialogue"
+  let prevOut = "";
+  while (out !== prevOut) {
+    prevOut = out;
+    out = out.replace(/(<say speaker="([^"]+)">.*?<\/say>)\s*([—\-].*?[—\-])\s*"{1,2}(.*?)"{1,2}/g, 
+      (_, prevSay, speaker, action, text) => {
+        let cleanAction = action.replace(/^[—\-]\s*/, '').replace(/\s*[—\-]$/, '');
+        return `${prevSay} <act>${cleanAction}</act> <say speaker="${speaker}">${text.trim()}</say>`;
+      }
+    );
+  }
+
+  // Heal *thoughts*
+  out = out.replace(/\*([^*]+)\*/g, "<think>$1</think>");
+
+  return out;
+}
+
+/** Narration longer than this gets split into multiple panels. */
+const MAX_PANEL_CHARS = 320;
+/** Dialogue / thought / system flow longer naturally — higher threshold. */
+const MAX_SPOKEN_CHARS = 400;
+
+/**
+ * Push over-long prose as multiple panels, split into manga-sized beats.
+ * Used for untagged fallback text and for any single tag the model crammed
+ * a wall into. Splits on blank lines first, then breaks any still-long
+ * paragraph into groups of ~3 sentences. Speaker (if any) carries over to
+ * every chunk — consecutive same-speaker bubbles read like manga.
+ */
+function pushPanelChunks(panels: Panel[], kind: PanelKind, text: string, speaker?: string) {
+  const MAX_CHARS = MAX_PANEL_CHARS;
+  const SENTENCES_PER_PANEL = 3;
+  const push = (t: string) => panels.push({ kind, ...(speaker ? { speaker } : {}), text: t });
+  for (const para of text.split(/\n{2,}/)) {
+    const p = para.trim();
+    if (!p) continue;
+    if (p.length <= MAX_CHARS) {
+      push(p);
+      continue;
+    }
+    // Long paragraph: regroup by sentences. Keeps quotes/ellipses intact —
+    // split only on sentence-ending punctuation followed by whitespace.
+    const sentences = p.split(/(?<=[.!?…])\s+/);
+    let buf: string[] = [];
+    for (const s of sentences) {
+      buf.push(s);
+      if (buf.length >= SENTENCES_PER_PANEL || buf.join(" ").length > MAX_CHARS) {
+        push(buf.join(" ").trim());
+        buf = [];
+      }
+    }
+    if (buf.length) push(buf.join(" ").trim());
+  }
+}
+
+/**
+ * Push a closed tag as panel(s). Prose kinds the model crammed a wall into
+ * get split; <act> stays whole (stage directions read as one unit).
+ */
+function pushPanel(panels: Panel[], tag: string, attrs: Record<string, string>, text: string) {
+  const panel = toPanel(tag, attrs, text);
+  const limit =
+    panel.kind === "narration" ? MAX_PANEL_CHARS
+    : panel.kind === "dialogue" || panel.kind === "thought" || panel.kind === "system" ? MAX_SPOKEN_CHARS
+    : Infinity;
+  if (panel.text.length <= limit) panels.push(panel);
+  else pushPanelChunks(panels, panel.kind, panel.text, panel.speaker);
+}
+
 /** Parses the entire raw output into structured panels + HUD ops. */
-export function parseStory(raw: string): ParsedDoc {
+export function parseStory(rawInput: string): ParsedDoc {
+  const raw = healCompactFormat(rawInput);
   const panels: Panel[] = [];
   const hudOps: HudOp[] = [];
   const crystals: { title: string; summary: string }[] = [];
+  const bibleAdds: BibleAddOp[] = [];
   const suggestions: string[] = [];
   let mood: string | undefined;
   let beat: string | undefined;
@@ -423,14 +531,21 @@ export function parseStory(raw: string): ParsedDoc {
     const chunk = raw.slice(cursor, start);
     if (chunk.trim()) {
       if (stack.length > 0) stack[stack.length - 1].text += chunk;
-      else panels.push({ kind: "narration", text: chunk.trim() });
+      else pushPanelChunks(panels, "narration", chunk.trim());
     }
     cursor = end;
 
-    if (isSelf || lc === "hud" || lc === "crystal" || lc === "scene") {
+    if (isSelf || lc === "hud" || lc === "crystal" || lc === "scene" || lc === "bible-add") {
       const attrs = parseAttrs(attrText);
       if (lc === "hud") hudOps.push(toHudOp(attrs));
       else if (lc === "crystal") crystals.push({ title: attrs.title ?? "", summary: attrs.summary ?? "" });
+      else if (lc === "bible-add") {
+        bibleAdds.push({
+          type: (attrs.type as BibleAddOp["type"]) || "character",
+          name: attrs.name ?? "",
+          desc: attrs.desc ?? ""
+        });
+      }
       else if (lc === "scene") {
         if (attrs.mood) mood = attrs.mood.toLowerCase();
         if (attrs.beat) beat = attrs.beat.toLowerCase();
@@ -448,7 +563,7 @@ export function parseStory(raw: string): ParsedDoc {
           const text = open.text.trim();
           if (text) {
             if (open.tag === "suggest") suggestions.push(text);
-            else panels.push(toPanel(open.tag, open.attrs, text));
+            else pushPanel(panels, open.tag, open.attrs, text);
           }
           // discard any unclosed inner tags
           stack.length = i;
@@ -464,18 +579,18 @@ export function parseStory(raw: string): ParsedDoc {
   const trailing = raw.slice(cursor).replace(/<[a-zA-Z/][^>]*$/, "");
   if (trailing.trim()) {
     if (stack.length > 0) stack[stack.length - 1].text += trailing;
-    else panels.push({ kind: "narration", text: trailing.trim() });
+    else pushPanelChunks(panels, "narration", trailing.trim());
   }
 
   for (const open of stack) {
     const text = open.text.trim();
     if (text) {
       if (open.tag === "suggest") suggestions.push(text);
-      else panels.push(toPanel(open.tag, open.attrs, text));
+      else pushPanel(panels, open.tag, open.attrs, text);
     }
   }
 
-  return { panels, hudOps, crystals, suggestions, mood, beat };
+  return { panels, hudOps, crystals, bibleAdds, suggestions, mood, beat };
 }
 
 function parseAttrs(s: string): Record<string, string> {
@@ -656,6 +771,23 @@ export async function playTurn(args: PlayTurnArgs): Promise<{ raw: string; parse
 
   const userMsg = args.input
     ? formatInput(args.input)
+    : (c.scenes ?? []).length === 0 && c.recap?.trim()
+      ? `[CONTINUATION OPENING — this is Part ${c.part ?? 2}, not a new story.]
+The previous part has been condensed into the recap in the system prompt. Continue from it.
+
+Structure this first Part ${c.part ?? 2} turn in this order, using the panel tags:
+
+1. <system> — ONE short paragraph (2-4 sentences) saying where Part ${(c.part ?? 2) - 1} left off, how much time has passed if any, and what pressure now hangs over the protagonist. Do NOT summarize the whole recap.
+
+2. <narrate> — re-ground the exact present scene: place, time, who is present, sensory details, and the protagonist's immediate position.
+
+3. <narrate> or <think speaker="${c.protagonist.name}"> — show what the protagonist is carrying forward emotionally or practically from Part ${(c.part ?? 2) - 1}: a promise, injury, relationship, clue, debt, or changed reputation.
+
+4. A forward-moving beat — a consequence arrives, an unresolved thread escalates, someone acts on their agenda, or a new arc opens from established canon. Do NOT undo previous outcomes. Do NOT re-introduce known characters as strangers.
+
+5. End with the usual <scene mood="..." beat="..."/> + 3 <suggest> chips.
+
+Keep it ~5-7 panels. The player should feel "we are back exactly where we left off, and the next arc is moving now."`
     : (c.scenes ?? []).length === 0
       ? `[OPENING TURN — write a proper prologue, do NOT dump the player straight into action.]
 This is the very first turn. The player has no idea where they are, what's happening in this world right now, or why their character is in this situation. Your job is to ORIENT them before anything happens.
@@ -724,7 +856,7 @@ Keep the whole opening ~5-7 panels. Atmospheric, not exposition-heavy. Show the 
   return { raw: acc, parsed: parseStory(acc) };
 }
 
-function formatInput(i: NonNullable<PlayTurnArgs["input"]>): string {
+export function formatInput(i: NonNullable<PlayTurnArgs["input"]>): string {
   switch (i.mode) {
     case "say":   return `[Speech] ${i.text}`;
     case "do":    return `[Action] ${i.text}`;
@@ -738,7 +870,7 @@ function formatInput(i: NonNullable<PlayTurnArgs["input"]>): string {
  * to cut token cost vs. the full XML form. The system prompt teaches the model
  * how to read this without imitating it in its own output.
  */
-function panelsToCompact(panels: Panel[]): string {
+export function panelsToCompact(panels: Panel[]): string {
   return panels.map(p => {
     switch (p.kind) {
       case "narration": return p.text;
@@ -748,4 +880,29 @@ function panelsToCompact(panels: Panel[]): string {
       case "system":    return `~ ${p.text} ~`;
     }
   }).join("\n");
+}
+
+export function applyBibleAdds(c: Campaign, ops: BibleAddOp[]): Campaign {
+  if (!ops.length) return c;
+  const nextBible = { ...c.bible };
+  
+  nextBible.keyCharacters = nextBible.keyCharacters ?? [];
+  nextBible.factions = nextBible.factions ?? [];
+  nextBible.rules = nextBible.rules ?? [];
+
+  for (const op of ops) {
+    if (op.type === "character") {
+      if (!nextBible.keyCharacters.some(k => k.name === op.name)) {
+        nextBible.keyCharacters = [...nextBible.keyCharacters, { name: op.name, role: "NPC", desc: op.desc }];
+      }
+    } else if (op.type === "faction") {
+      if (!nextBible.factions.some(f => f.name === op.name)) {
+        nextBible.factions = [...nextBible.factions, { name: op.name, desc: op.desc }];
+      }
+    } else if (op.type === "rule") {
+      nextBible.rules = [...nextBible.rules, `${op.name}: ${op.desc}`];
+    }
+  }
+
+  return { ...c, bible: nextBible };
 }

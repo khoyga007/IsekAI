@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, FileDown, Bookmark } from "lucide-react";
+import { X, FileDown, Bookmark, FastForward } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Backdrop } from "@/components/Backdrop";
 import { SideRail, type RailKey } from "@/components/SideRail";
@@ -15,6 +15,7 @@ import { Library } from "@/components/Library";
 import { CastView } from "@/components/CastView";
 import { MemoryView } from "@/components/MemoryView";
 import { SavesView } from "@/components/SavesView";
+import { SequelView } from "@/components/SequelView";
 import { WorldEditView } from "@/components/WorldEditView";
 import { useSettings } from "@/state/settings";
 import { useCampaign } from "@/state/campaign";
@@ -22,7 +23,7 @@ import type { SourceKind } from "@/state/types";
 import { exportCampaign } from "@/lib/export";
 import { useT } from "@/lib/i18n";
 
-type Drawer = "library" | "worldedit" | "cast" | "memory" | "saves" | "settings" | null;
+type Drawer = "library" | "worldedit" | "cast" | "memory" | "saves" | "sequel" | "settings" | null;
 
 export default function App() {
   const t = useT();
@@ -121,6 +122,13 @@ export default function App() {
                     <Bookmark size={14} />
                   </button>
                   <button
+                    onClick={() => setDrawer("sequel")}
+                    className="grid place-items-center w-9 h-9 rounded-full glass hover:glass-hi transition"
+                    title={t("btn.sequel")}
+                  >
+                    <FastForward size={14} />
+                  </button>
+                  <button
                     onClick={() => exportCampaign(campaign).catch(console.error)}
                     className="grid place-items-center w-9 h-9 rounded-full glass hover:glass-hi transition"
                     title={t("btn.export")}
@@ -158,6 +166,7 @@ export default function App() {
       <CastView open={drawer === "cast"} onClose={closeDrawer} />
       <MemoryView open={drawer === "memory"} onClose={closeDrawer} />
       <SavesView open={drawer === "saves"} onClose={closeDrawer} />
+      <SequelView open={drawer === "sequel"} onClose={closeDrawer} />
       <WorldEditView open={drawer === "worldedit"} onClose={closeDrawer} />
       <Onboarding
         open={onboardOpen}

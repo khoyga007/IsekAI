@@ -6,6 +6,25 @@ For the full picture, read HANDOFF.md. This is just a quick scratchpad for
 
 DONE (2026-06-12)
 -----------------
+[x] Continue to Part 2 / sequel campaign flow. Adds topbar fast-forward
+    drawer (`SequelView`) that generates editable recap, stores it on a fresh
+    Part N+1 campaign, keeps bible/protagonist/HUD state, clears scenes/
+    crystals/bookmarks, links `prevId`, and injects recap into stable prompt.
+    Follow-up fix: first turn of a sequel now uses a continuation-opening
+    prompt instead of generic new-campaign prologue. i18n EN/VI added.
+    Also kept from same pass: <bible-add> tag (AI can add recurring
+    characters/factions/rules to the bible mid-game) and healCompactFormat
+    (heals compact-format output back to XML for the parser).
+[x] Story Mode selector (Adventure/Romcom/Romance/Harem) REMOVED — tried it,
+    this UI doesn't fit romance pacing. Romance will be a separate app later.
+[x] Untagged-prose fallback now splits into manga-sized panels. When the
+    model drifts off XML (mimics compact history format), parseStory used to
+    dump everything into ONE giant narration panel ("wall of text" blocks).
+    pushNarrationChunks splits on blank lines, then regroups long paragraphs
+    into ~3-sentence panels (max ~320 chars). Also applies to over-long
+    single tags: <narrate> >320 chars, <say>/<think>/<system> >400 chars
+    (split chunks keep the same speaker → consecutive same-speaker bubbles,
+    manga style). <act> never split — stage directions read as one unit.
 [x] DeepSeek V4 Flash "no text" fix (4 parts). Root cause: v4-flash defaults
     to THINKING mode; CoT streams via delta.reasoning_content (was dropped)
     and counts against max_tokens (1200 got eaten whole on long contexts →
