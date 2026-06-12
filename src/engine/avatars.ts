@@ -81,32 +81,50 @@ export async function fetchAniListCast(mediaTitle: string, signal?: AbortSignal)
 }
 
 /**
+ * Normalize a character name into comparable word tokens. AniList stores
+ * full names in given-name-first order ("Luffy Monkey", "Zoro Roronoa")
+ * while LLM-written bibles use the conventional order ("Monkey D. Luffy",
+ * "Roronoa Zoro") — so all comparisons must be ORDER-INSENSITIVE.
+ * Punctuation ("D.", apostrophes, hyphens) is stripped to whitespace.
+ */
+function nameTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/[.,'"’´`\-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
  * Find the best AniList character match for `name` within a fetched cast.
- * Compares against `name` + `alternative` aliases case-insensitively, with
- * fuzzy fallback (substring + last-name match).
+ * Compares against `name` + `alternative` aliases using order-insensitive
+ * token sets, with subset / single-token fallbacks.
  */
 export function matchCanonAvatar(name: string, cast: AniListCharacter[]): string | null {
   if (!name || cast.length === 0) return null;
-  const target = name.toLowerCase().trim();
-  const targetParts = target.split(/\s+/);
+  const target = nameTokens(name);
+  if (target.length === 0) return null;
+  const targetSet = new Set(target);
 
-  // Exact full-name match.
+  const img = (c: AniListCharacter) => c.imageLarge ?? c.imageMedium ?? null;
+  const aliases = (c: AniListCharacter) => [c.name, ...c.alternatives].map(nameTokens).filter((t) => t.length > 0);
+
+  // 1. Same token set, any order ("Roronoa Zoro" ↔ "Zoro Roronoa", "Monkey D. Luffy" ↔ "Luffy Monkey D").
   for (const c of cast) {
-    if (c.name.toLowerCase() === target) return c.imageLarge ?? c.imageMedium ?? null;
-    if (c.alternatives.some((a) => a.toLowerCase() === target)) return c.imageLarge ?? c.imageMedium ?? null;
+    if (aliases(c).some((t) => t.length === targetSet.size && t.every((w) => targetSet.has(w)))) return img(c);
   }
-  // Substring match (handles "Frieren" matching "Frieren the Slayer").
+  // 2. Subset either way ("Frieren" ⊂ "Frieren the Slayer"; "Monkey D Luffy" ⊃ "Luffy Monkey").
   for (const c of cast) {
-    const nm = c.name.toLowerCase();
-    if (nm.includes(target) || target.includes(nm)) return c.imageLarge ?? c.imageMedium ?? null;
-    if (c.alternatives.some((a) => a.toLowerCase().includes(target))) return c.imageLarge ?? c.imageMedium ?? null;
+    for (const t of aliases(c)) {
+      const tSet = new Set(t);
+      if (t.every((w) => targetSet.has(w)) || target.every((w) => tSet.has(w))) return img(c);
+    }
   }
-  // Last-name match for multi-word names (e.g. "Edward Elric" → "Elric").
-  if (targetParts.length > 1) {
-    const last = targetParts[targetParts.length - 1];
-    for (const c of cast) {
-      const parts = c.name.toLowerCase().split(/\s+/);
-      if (parts[parts.length - 1] === last) return c.imageLarge ?? c.imageMedium ?? null;
+  // 3. Shared distinctive token ("Edward Elric" → "Elric Edward" already caught; this
+  //    catches "Captain Levi" vs "Levi Ackerman"). Skip 1-2 char tokens ("d", initials).
+  for (const c of cast) {
+    for (const t of aliases(c)) {
+      if (t.some((w) => w.length >= 3 && targetSet.has(w))) return img(c);
     }
   }
   return null;

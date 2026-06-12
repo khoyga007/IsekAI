@@ -4,6 +4,17 @@ IsekAI — progress notes (last updated 2026-06-12)
 For the full picture, read HANDOFF.md. This is just a quick scratchpad for
 "where we are right now" and "what to pick up next".
 
+DONE (2026-06-13)
+-----------------
+[x] AniList avatar matching fixed — was effectively dead. AniList returns
+    full names in given-name-first order ("Luffy Monkey", "Zoro Roronoa")
+    while LLM bibles write conventional order ("Monkey D. Luffy"), so the
+    exact/substring/last-name matcher never hit. matchCanonAvatar now
+    tokenizes (lowercase, punctuation stripped) and matches order-
+    insensitively: token-set equality → subset either way → shared
+    distinctive token (≥3 chars). Verified live: One Piece + AoT casts
+    all match, OC names return null (sigil fallback).
+
 DONE (2026-06-12)
 -----------------
 [x] Continue to Part 2 / sequel campaign flow. Adds topbar fast-forward
