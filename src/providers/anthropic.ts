@@ -63,6 +63,9 @@ export const anthropic: Provider = {
         "content-type": "application/json",
         "x-api-key": cfg.apiKey,
         "anthropic-version": "2023-06-01",
+        // Required when calling the API from a browser/webview context;
+        // without it Anthropic rejects CORS requests with 401.
+        "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
         model: req.model,

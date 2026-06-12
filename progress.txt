@@ -6,6 +6,48 @@ For the full picture, read HANDOFF.md. This is just a quick scratchpad for
 
 DONE (2026-06-13)
 -----------------
+[x] Streaming-read UX overhaul (StoryView.tsx). Three interacting bugs:
+    (1) auto-scroll yanked view to bottom on every chunk even while user
+    was reading above; (2) ALL draft panels typewrote in parallel so later
+    panels spoiled the scene; (3) commitTurn at stream end swapped draft
+    for committed scene with typewriter off → remaining text popped in
+    full. Fixes: near-bottom-gated follow scroll (ResizeObserver on
+    content + scroll listener; detaches when user scrolls up >160px from
+    bottom, re-attaches at bottom); sequential panel reveal (ScenePage
+    typedCount gates visiblePanels — panel N+1 mounts only after N types
+    out, PanelContent fires onTyped); reveal continues across commit
+    (revealId state + shared key="reveal" between draft and committed-
+    reveal ScenePage preserves useTypewriter idxRef so no restart/pop;
+    chips appear only after reveal completes). Click-to-skip still
+    reveals everything instantly.
+[x] Suggestion chips disappearing on long campaigns fixed. Compact history
+    has no representation for <scene/>/<suggest>, so after many turns the
+    model imitates history and drops the closers (also lost entirely on
+    untagged drift / output truncation). Added an always-on FORMAT REMINDER
+    section to buildSystemPromptDynamic — sits after history, right before
+    user input, where recency is strongest. Side effect: dynamic block is
+    never empty anymore (~40 tokens/turn, fine on DeepSeek message-order
+    caching). storyEngine.ts.
+[x] Narration misrendered as anonymous "thought" bubble fixed. Two paths
+    produced a speakerless <think> panel: (1) model emits <think> without
+    speaker attr around third-person prose; (2) healCompactFormat turns
+    *asterisk emphasis* in untagged drift output into <think> with no
+    speaker. Format mandates speaker="Name" on every thought, so toPanel
+    now reroutes speakerless <think> to a narration panel. Also tightened
+    STORY_SYS: <think> = first-person only, speaker REQUIRED. storyEngine.ts.
+[x] "Rendered more hooks than during the previous render" crash fixed.
+    REAL root cause: PanelContent called useSpeakerAvatar conditionally —
+    only inside the `dialogue` branch, after early returns. Panels are
+    keyed by index and a draft panel can change KIND between stream
+    chunks (re-parse + splitting), so the same instance rendered 1 hook
+    (narration) then 2 hooks (dialogue) → crash. Hoisted the hook above
+    the early returns. Also removed AnimatePresence around panels.map
+    (no exit animations; index keys + reshuffling risked double-mounts).
+    StoryView.tsx.
+[x] Anthropic 401 on browser/webview calls fixed — added required
+    "anthropic-dangerous-direct-browser-access: true" header to
+    providers/anthropic.ts. Without it Anthropic rejects all CORS
+    requests with 401 authentication_error.
 [x] AniList avatar matching fixed — was effectively dead. AniList returns
     full names in given-name-first order ("Luffy Monkey", "Zoro Roronoa")
     while LLM bibles write conventional order ("Monkey D. Luffy"), so the
@@ -81,9 +123,10 @@ OPEN / NEXT UP
     Reuse AvatarPicker in "edit existing" mode.
 [ ] HUD op rollback on retry/undo — record inverse ops on Scene so undo
     can revert HP deltas, item adds, affinity shifts.
-[ ] Bible auto-evolution — GM emits <bible-add type="..." name="..."
-    desc="..." /> to register newly-invented NPCs/factions/locations
-    persistently. Discussed but not built.
+[ ] Bible auto-evolution PHASE 2. <bible-add> already SHIPPED (0758a64) —
+    do NOT re-implement. Remaining: <bible-update>/<bible-remove> tags,
+    off-screen world evolution, anti-bloat (entry caps, name dedupe,
+    batched changes — bible edits invalidate the 85-95% prompt cache).
 
 KNOWN BUGS / WATCHLIST
 ----------------------
@@ -93,6 +136,15 @@ KNOWN BUGS / WATCHLIST
   mandate at least 3 key chars even when protagonist is OC.
 - Retry button does NOT roll back HUD ops (HP delta would apply twice).
   Pre-existing limitation; documented but not fixed.
+- Anthropic 2nd cache breakpoint defeated during PLAY: providers/anthropic.ts
+  hoists ALL system messages into the `system` param (before `messages`), so
+  the volatile dynamic block (HUD state) sits between the stable block and
+  history in the real prefix → history breakpoint misses whenever HUD
+  changes (pays 1.25x write instead of 0.1x read). Stable block still hits.
+  Irrelevant for world build (one-shot) and for OpenAI/DeepSeek (message-
+  order prefix caching — dynamic correctly placed after history there).
+  Fix when someone plays long campaigns on Claude: merge dynamic block into
+  the final user message for the Anthropic provider (~10 lines).
 
 DESIGN NOTES (carried from session discussion)
 ----------------------------------------------

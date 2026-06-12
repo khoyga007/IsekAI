@@ -87,7 +87,8 @@ export default function App() {
 
   const onQuickBookmark = async () => {
     if (!campaign) return;
-    const label = prompt(t("saves.create.placeholder"), `Turn ${campaign.scenes.length}`);
+    const currentTurn = campaign.scenes.length > 0 ? campaign.scenes[campaign.scenes.length - 1].turn + 1 : 0;
+    const label = prompt(t("saves.create.placeholder"), `Turn ${currentTurn}`);
     if (label === null) return;
     await bookmark(label);
     setDrawer("saves");
@@ -106,7 +107,7 @@ export default function App() {
           <div className="flex items-start justify-between pr-6 pt-5 gap-3">
             <div className="flex-1">
               <TopBar
-                chapter={campaign ? `${t("header.chapter")} · ${String(campaign.scenes.length).padStart(2, "0")}` : t("header.prologue")}
+                chapter={campaign ? `${t("header.chapter")} · ${String(campaign.scenes.length > 0 ? campaign.scenes[campaign.scenes.length - 1].turn + 1 : 0).padStart(2, "0")}` : t("header.prologue")}
                 title={campaign ? campaign.bible.title : t("header.blank")}
                 subtitle={campaign ? `${campaign.protagonist.name} — ${campaign.protagonist.role}` : t("header.subtitle")}
               />

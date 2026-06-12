@@ -90,8 +90,10 @@ export function InputBar() {
       if (parsed.hudOps.length > 0 || parsed.bibleAdds.length > 0) {
         useCampaign.setState({ current: { ...afterBible, scenes: useCampaign.getState().current!.scenes } });
       }
+      const finalScenes = useCampaign.getState().current!.scenes;
+      const currentTurn = finalScenes.length > 0 ? finalScenes[finalScenes.length - 1].turn : 0;
       for (const cr of parsed.crystals) {
-        await addCrystal({ turn: useCampaign.getState().current!.scenes.length - 1, title: cr.title, summary: cr.summary });
+        await addCrystal({ turn: currentTurn, title: cr.title, summary: cr.summary });
       }
       void raw;
     } catch (e: any) {

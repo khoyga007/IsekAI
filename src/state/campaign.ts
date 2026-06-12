@@ -104,7 +104,7 @@ function summarize(c: Campaign): CampaignSummary {
     title: c.bible.title,
     genre: c.bible.genre,
     protagonist: c.protagonist.name,
-    turns: c.scenes.length,
+    turns: c.scenes.length > 0 ? c.scenes[c.scenes.length - 1].turn + 1 : 0,
     updatedAt: c.updatedAt,
   };
 }
@@ -202,7 +202,7 @@ export const useCampaign = create<CampaignStore>((set, get) => ({
     if (!cur || !draft) return;
     const scene: Scene = {
       id: nanoid(8),
-      turn: cur.scenes.length,
+      turn: cur.scenes.length > 0 ? cur.scenes[cur.scenes.length - 1].turn + 1 : 0,
       playerInput: input,
       panels: draft.panels,
       hudPatch,
@@ -282,11 +282,12 @@ export const useCampaign = create<CampaignStore>((set, get) => ({
     // Strip bookmarks from snapshot to avoid recursive growth.
     const { bookmarks: _b, ...rest } = cur;
     void _b;
+    const currentTurn = cur.scenes.length > 0 ? cur.scenes[cur.scenes.length - 1].turn + 1 : 0;
     const sp: SavePoint = {
       id: nanoid(6),
-      label: label.trim() || `Turn ${cur.scenes.length}`,
+      label: label.trim() || `Turn ${currentTurn}`,
       createdAt: Date.now(),
-      turn: cur.scenes.length,
+      turn: currentTurn,
       snapshot: rest,
     };
     const next: Campaign = {

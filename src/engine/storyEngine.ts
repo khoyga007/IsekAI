@@ -26,7 +26,7 @@ CRITICAL: You MUST wrap EVERY SINGLE SENTENCE in an XML tag. NEVER output plain 
   <narrate>Third-person, sensory, present-tense.</narrate>
   <act>A concise physical beat.</act>
   <say speaker="Name">Dialogue.</say>
-  <think speaker="Name">Inner thought (only the protagonist, or NPC when narratively justified).</think>
+  <think speaker="Name">First-person inner thought ONLY — speaker attr REQUIRED. Third-person description goes in <narrate>, never here.</think>
   <system>GM note: time passing, scene transition, world reaction.</system>
 
 Inline between panels — HUD ops and memory pins:
@@ -34,7 +34,6 @@ Inline between panels — HUD ops and memory pins:
   <hud op="tag-add|tag-remove" id="<existing-id>" value="poisoned"/>
   <hud op="affinity" id="<existing-id>" name="Rinka" value="+5"/>
   <hud op="item-add|item-remove" id="<existing-id>" name="Iron Sword" qty="1"/>
-  <crystal title="..." summary="..."/>
   <bible-add type="character|faction|rule" name="..." desc="..."/>
 
 End EVERY turn with exactly ONE <scene/> + 3 <suggest>:
@@ -374,12 +373,15 @@ export function buildSystemPromptDynamic(c: Campaign): string {
     ? `═══ PACING NUDGE ═══\nThe last ${recentBeats.length} turns were all "${recentBeats.join(" + ")}". This turn MUST be a non-intense beat (downtime, banter, romance, sidequest, introspection, or worldbuilding) UNLESS the player's input directly forces violence. Let the world breathe.`
     : "";
 
-  // Skip empty sections; if everything is empty, return "" so the caller can
-  // omit the system message entirely.
   const sections: string[] = [];
   if (pacingHint) sections.push(pacingHint);
   if (huds) sections.push(`═══ CURRENT HUD STATE ═══\n${huds}`);
   if (crystals) sections.push(`═══ MEMORY CRYSTALS (key past events) ═══\n${crystals}`);
+  // Format reminder lives HERE (after the long compact history, right before
+  // the user input) because on long campaigns the model starts imitating the
+  // tagless compact history and silently drops the <scene/> + <suggest>
+  // closers mandated at the top of the (now distant) stable block.
+  sections.push(`═══ FORMAT REMINDER ═══\nWrap every sentence in XML tags (<narrate>/<act>/<say>/<think>). End this turn with exactly ONE <scene mood beat/> + 3 <suggest> chips — never skip them.`);
   return sections.join("\n\n");
 }
 
@@ -602,6 +604,14 @@ function parseAttrs(s: string): Record<string, string> {
 }
 
 function toPanel(tag: string, attrs: Record<string, string>, text: string): Panel {
+  // <think> without a speaker is almost always misrouted narration: the
+  // format mandates speaker="Name" on every thought, and the *italics*
+  // heal in healCompactFormat also lands here when models use asterisks
+  // for emphasis/action rather than inner monologue. Render as narration
+  // instead of an anonymous "thought" bubble.
+  if (tag === "think" && !attrs.speaker) {
+    return { kind: "narration", speaker: undefined, text };
+  }
   const kind: PanelKind =
     tag === "narrate" ? "narration"
     : tag === "act"     ? "action"
@@ -892,12 +902,28 @@ export function applyBibleAdds(c: Campaign, ops: BibleAddOp[]): Campaign {
 
   for (const op of ops) {
     if (op.type === "character") {
-      if (!nextBible.keyCharacters.some(k => k.name === op.name)) {
+      const idx = nextBible.keyCharacters.findIndex(k => k.name === op.name);
+      if (idx === -1) {
         nextBible.keyCharacters = [...nextBible.keyCharacters, { name: op.name, role: "NPC", desc: op.desc }];
+      } else {
+        const old = nextBible.keyCharacters[idx];
+        nextBible.keyCharacters = [
+          ...nextBible.keyCharacters.slice(0, idx),
+          { ...old, desc: `${old.desc} (Update: ${op.desc})` },
+          ...nextBible.keyCharacters.slice(idx + 1)
+        ];
       }
     } else if (op.type === "faction") {
-      if (!nextBible.factions.some(f => f.name === op.name)) {
+      const idx = nextBible.factions.findIndex(f => f.name === op.name);
+      if (idx === -1) {
         nextBible.factions = [...nextBible.factions, { name: op.name, desc: op.desc }];
+      } else {
+        const old = nextBible.factions[idx];
+        nextBible.factions = [
+          ...nextBible.factions.slice(0, idx),
+          { ...old, desc: `${old.desc} (Update: ${op.desc})` },
+          ...nextBible.factions.slice(idx + 1)
+        ];
       }
     } else if (op.type === "rule") {
       nextBible.rules = [...nextBible.rules, `${op.name}: ${op.desc}`];

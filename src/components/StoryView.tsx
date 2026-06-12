@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Pencil, Check, X } from "lucide-react";
 import { useCampaign } from "@/state/campaign";
 import { useSettings } from "@/state/settings";
@@ -25,35 +25,65 @@ export function StoryView() {
   const streaming = useCampaign((s) => s.streaming);
   const typewriterEnabled = useSettings((s) => s.ui.typewriter);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef(true);
   const [skipDraft, setSkipDraft] = useState(false);
+  // Scene id still being typed out AFTER the stream committed it. The turn
+  // commits as soon as the stream ends (data safety), but the typewriter is
+  // usually behind — without this the committed scene would pop in fully.
+  const [revealId, setRevealId] = useState<string | null>(null);
+  const hadDraftRef = useRef(false);
 
   // Reset skip when a new turn begins.
   useEffect(() => {
     if (streaming) setSkipDraft(false);
   }, [streaming]);
 
-  // Auto-scroll to bottom on new panels.
+  // When the draft commits, keep revealing the resulting scene in place.
+  useEffect(() => {
+    if (hadDraftRef.current && !draft && typewriterEnabled) {
+      const scenes = useCampaign.getState().current?.scenes;
+      const last = scenes && scenes.length > 0 ? scenes[scenes.length - 1] : undefined;
+      if (last) setRevealId(last.id);
+    }
+    hadDraftRef.current = !!draft;
+  }, [draft, typewriterEnabled]);
+
+  // Follow content growth (stream + typewriter) only while the user is at
+  // the bottom. Scrolling up to read detaches the follow; scrolling back
+  // down re-attaches it. Never yank the view away from the reader.
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [c?.scenes.length, draft?.panels.length, draft?.raw.length]);
+    const content = el?.firstElementChild;
+    if (!el || !content) return;
+    const onScroll = () => {
+      followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    };
+    const ro = new ResizeObserver(() => {
+      if (followRef.current) el.scrollTo({ top: el.scrollHeight });
+    });
+    ro.observe(content);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => { ro.disconnect(); el.removeEventListener("scroll", onScroll); };
+  }, []);
 
   const allScenes = useMemo(() => c?.scenes ?? [], [c]);
 
   if (!c) return null;
 
   const lastScene = allScenes.length > 0 ? allScenes[allScenes.length - 1] : null;
-  const showChips = !!lastScene && !streaming && !draft && (lastScene.suggestions?.length ?? 0) > 0;
+  const lastIsRevealing = !draft && !!lastScene && revealId === lastScene.id;
+  const committedScenes = lastIsRevealing ? allScenes.slice(0, -1) : allScenes;
+  const showChips = !!lastScene && !streaming && !draft && !lastIsRevealing && (lastScene.suggestions?.length ?? 0) > 0;
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-8 pb-2">
       <div className="max-w-3xl mx-auto flex flex-col gap-10 py-2">
-        {allScenes.map((s, idx) => (
+        {committedScenes.map((s, idx) => (
           <ScenePage key={s.id} index={idx} sceneIdx={idx} panels={s.panels} input={s.playerInput} editable />
         ))}
         {draft && (
           <ScenePage
+            key="reveal"
             index={allScenes.length}
             panels={draft.panels}
             streaming={streaming}
@@ -61,6 +91,22 @@ export function StoryView() {
             typewriter={typewriterEnabled}
             skip={skipDraft}
             onSkip={() => setSkipDraft(true)}
+          />
+        )}
+        {lastIsRevealing && lastScene && (
+          /* key="reveal" matches the draft's key so the typewriter state
+             survives the draft→committed swap instead of restarting. */
+          <ScenePage
+            key="reveal"
+            index={allScenes.length - 1}
+            sceneIdx={allScenes.length - 1}
+            panels={lastScene.panels}
+            input={lastScene.playerInput}
+            typewriter={typewriterEnabled}
+            skip={skipDraft}
+            onSkip={() => setSkipDraft(true)}
+            onRevealDone={() => setRevealId(null)}
+            editable
           />
         )}
         {showChips && lastScene?.suggestions && (
@@ -110,6 +156,7 @@ function ScenePage({
   typewriter,
   skip,
   onSkip,
+  onRevealDone,
   editable,
 }: {
   index: number;
@@ -122,8 +169,27 @@ function ScenePage({
   typewriter?: boolean;
   skip?: boolean;
   onSkip?: () => void;
+  /** Fired once every panel has fully typed out (committed-reveal scene only). */
+  onRevealDone?: () => void;
   editable?: boolean;
 }) {
+  // Sequential reveal: only panels up to the first still-typing one render,
+  // so later panels can't spoil the scene while an earlier one is typing.
+  // typedCount = number of panels that finished; Math.max guards against
+  // out-of-order onTyped fires when panels re-key during stream re-parse.
+  const [typedCount, setTypedCount] = useState(0);
+  const sequential = !!typewriter && !skip;
+  const visiblePanels = sequential ? panels.slice(0, typedCount + 1) : panels;
+
+  useEffect(() => {
+    if (streaming || !typewriter) return;
+    // Done when every panel typed out — or when the user skipped (skip
+    // disables sequential mode, so typedCount stops advancing).
+    if (skip || (panels.length > 0 && typedCount >= panels.length)) {
+      onRevealDone?.();
+    }
+  }, [streaming, typewriter, skip, typedCount, panels.length, onRevealDone]);
+
   // Skip-on-click only meaningful while typing out a draft scene.
   const handleSkipClick = typewriter && !skip ? onSkip : undefined;
   return (
@@ -143,19 +209,22 @@ function ScenePage({
       {input && <PlayerInputCard mode={input.mode} text={input.text} />}
 
       <div className="flex flex-col gap-3 mt-3">
-        <AnimatePresence initial={false}>
-          {panels.map((p, i) => (
-            <PanelView
-              key={i}
-              panel={p}
-              typewriter={typewriter}
-              skip={skip}
-              sceneIdx={sceneIdx}
-              panelIdx={i}
-              editable={!!editable}
-            />
-          ))}
-        </AnimatePresence>
+        {/* No AnimatePresence here: panels have no exit animations, and the
+            draft panel list is re-parsed every stream chunk (splitting can
+            reshuffle indices) — AnimatePresence + index keys then double-
+            mounts instances and trips "Rendered more hooks" in React. */}
+        {visiblePanels.map((p, i) => (
+          <PanelView
+            key={i}
+            panel={p}
+            typewriter={typewriter}
+            skip={skip}
+            sceneIdx={sceneIdx}
+            panelIdx={i}
+            editable={!!editable}
+            onTyped={() => setTypedCount((n) => Math.max(n, i + 1))}
+          />
+        ))}
         {streaming && panels.length === 0 && rawTail !== undefined && (
           <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-text-dim)" }}>
             <span className="w-1 h-1 rounded-full animate-pulse" style={{ background: "var(--color-vermillion)" }} />
@@ -202,6 +271,7 @@ function PanelView({
   sceneIdx,
   panelIdx,
   editable,
+  onTyped,
 }: {
   panel: Panel;
   typewriter?: boolean;
@@ -209,6 +279,7 @@ function PanelView({
   sceneIdx?: number;
   panelIdx?: number;
   editable?: boolean;
+  onTyped?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing && sceneIdx !== undefined && panelIdx !== undefined) {
@@ -224,7 +295,7 @@ function PanelView({
   const canEdit = editable && sceneIdx !== undefined && panelIdx !== undefined;
   return (
     <div className="relative group">
-      <PanelContent panel={panel} typewriter={typewriter} skip={skip} />
+      <PanelContent panel={panel} typewriter={typewriter} skip={skip} onTyped={onTyped} />
       {canEdit && <PanelEditButton onClick={() => setEditing(true)} />}
     </div>
   );
@@ -331,8 +402,20 @@ function PanelEditor({
   );
 }
 
-function PanelContent({ panel, typewriter, skip }: { panel: Panel; typewriter?: boolean; skip?: boolean }) {
+function PanelContent({ panel, typewriter, skip, onTyped }: { panel: Panel; typewriter?: boolean; skip?: boolean; onTyped?: () => void }) {
   const text = useTypewriter(panel.text, !!typewriter, !!skip);
+  // Must be called unconditionally: panels are keyed by index and a draft
+  // panel can change KIND between stream chunks (re-parse + splitting), so
+  // a hook behind the `dialogue` branch renders a different hook count on
+  // the same instance → "Rendered more hooks than during the previous render".
+  const avatarUrl = useSpeakerAvatar(panel.kind === "dialogue" ? panel.speaker : undefined);
+  // Notify parent when this panel finished typing (drives sequential reveal).
+  // May fire again if panel.text grows during stream re-parse; the parent
+  // takes Math.max so repeats are harmless. Unconditional hook — see above.
+  const typedOut = !!typewriter && text.length >= panel.text.length;
+  useEffect(() => {
+    if (typedOut) onTyped?.();
+  }, [typedOut, onTyped]);
   const isPartial = !!typewriter && text.length < panel.text.length;
   const cursor = isPartial ? (
     <span
@@ -377,7 +460,6 @@ function PanelContent({ panel, typewriter, skip }: { panel: Panel; typewriter?: 
     );
   }
   if (panel.kind === "dialogue") {
-    const avatarUrl = useSpeakerAvatar(panel.speaker);
     return (
       <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex items-end gap-2 max-w-[88%]">
         {panel.speaker && <Avatar name={panel.speaker} url={avatarUrl} size={32} />}
