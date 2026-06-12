@@ -52,6 +52,9 @@ export interface ChatUsage {
 export interface ChatChunk {
   /** Incremental text delta. */
   delta: string;
+  /** Chain-of-thought delta from reasoning models (DeepSeek thinking mode).
+   *  Never part of the story text — callers may show it as progress. */
+  reasoning?: string;
   /** Set on the final chunk only. */
   done?: boolean;
   /** Optional usage info on final chunk. */

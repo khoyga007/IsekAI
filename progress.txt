@@ -1,11 +1,29 @@
-IsekAI — progress notes (last updated 2026-04-29)
+IsekAI — progress notes (last updated 2026-06-12)
 ====================================================
 
 For the full picture, read HANDOFF.md. This is just a quick scratchpad for
 "where we are right now" and "what to pick up next".
 
-DONE (Phase 6, this session)
-----------------------------
+DONE (2026-06-12)
+-----------------
+[x] DeepSeek V4 Flash "no text" fix (4 parts). Root cause: v4-flash defaults
+    to THINKING mode; CoT streams via delta.reasoning_content (was dropped)
+    and counts against max_tokens (1200 got eaten whole on long contexts →
+    empty content). Fixes: (1) openai-compat yields reasoning chunks +
+    90s stall watchdog on data events; (2) playTurn maxTokens 1200→4096;
+    (3) parseStory routes untagged text into narration panels instead of
+    discarding (also strips partial trailing tag); (4) playTurn throws on
+    empty output instead of committing empty scene. DeepSeek defaultModels
+    updated to V4 chips (deepseek-chat alias deprecated 2026-07-24).
+[x] Removed AI image generation (Nano Banana 2 + Pollinations.ai) to keep
+    the app strictly free to run. Avatars are now AniList canon match +
+    procedural sigil only. engine/avatars.ts slimmed to AniList fetch/match,
+    AvatarPicker is AniList-only (canon match pre-selected), Onboarding
+    skips the picker entirely for non-canon sources (world/rng) since
+    there is nothing to pick. Old gen code lives in git history.
+
+DONE (Phase 6, 2026-04-29 session)
+----------------------------------
 [x] Aggressive prompt caching — message reorder + Anthropic 2 breakpoints +
     Gemini stable/volatile split + OpenAI include_usage. ~85-95% cache hit
     rate. ~5-10x effective input cost reduction on long campaigns.
@@ -25,9 +43,6 @@ DONE (Phase 6, this session)
 
 OPEN / NEXT UP
 --------------
-[ ] Verify avatar load works end-to-end. User showed sigil fallback for all
-    Pollinations URLs in earlier testing — Nano Banana path should resolve
-    that for users with a Google key, but needs human confirmation.
 [ ] Canon-rank HUD widget (Mức 1 from power-system discussion). Edit
     HUD_SYS in worldBuilder.ts to mandate a stat-number widget for known
     shonen-battle universes (Bounty / Rank / Grade / Hero Rank / Cursed
@@ -42,12 +57,6 @@ OPEN / NEXT UP
 
 KNOWN BUGS / WATCHLIST
 ----------------------
-- Pollinations.ai sometimes fails to load images (Edge/Webview2 + slow
-  generation). User saw all 4 candidates fall back to procedural sigils.
-  Mitigations applied: removed loading="lazy", removed model=flux param,
-  strip diacritics, clip prompt to 280 chars. If still flaky, switch
-  fully to Nano Banana for users with Google key, OR add manual URL
-  paste fallback.
 - AvatarPicker only shows protagonist when bible.keyCharacters is empty.
   AI sometimes skips key characters (saw on "Owari no Seraph" with OC
   protagonist). Could be fixed by tightening BIBLE_SYS prompt to

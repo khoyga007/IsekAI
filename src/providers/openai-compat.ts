@@ -67,17 +67,49 @@ export async function* openAICompatStream(
   // `choices: []` and only the usage block). So we must NOT emit `done`
   // on finish_reason — instead, accumulate usage and emit done at the
   // end of the stream.
+  // Stall watchdog: under load DeepSeek holds the connection open with
+  // keep-alives without sending data events. Fail with a clear error
+  // instead of spinning forever. Reasoning deltas count as activity, so
+  // long thinking phases don't trip the timer.
+  const STALL_MS = 90_000;
+
   let lastUsage: any = null;
-  for await (const data of parseSSE(res, req.signal)) {
-    if (data === "[DONE]") break;
-    let evt: any;
-    try { evt = JSON.parse(data); } catch { continue; }
-    if (evt.usage) lastUsage = evt.usage;
-    const choice = evt.choices?.[0];
-    const delta = choice?.delta?.content;
-    if (typeof delta === "string" && delta.length) {
-      yield { delta };
+  const it = parseSSE(res, req.signal)[Symbol.asyncIterator]();
+  try {
+    while (true) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const result = await Promise.race([
+        it.next(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new ProviderError(providerId, null, `Stream stalled — no data received for ${STALL_MS / 1000}s. Provider may be overloaded; retry or switch model.`)),
+            STALL_MS,
+          );
+        }),
+      ]).finally(() => clearTimeout(timer));
+      if (result.done) break;
+      const data = result.value;
+      if (data === "[DONE]") break;
+      let evt: any;
+      try { evt = JSON.parse(data); } catch { continue; }
+      if (evt.usage) lastUsage = evt.usage;
+      const choice = evt.choices?.[0];
+      // Reasoning models (DeepSeek V4 Flash thinking / R1) stream their CoT
+      // in a separate field. Surface it as a non-story chunk so the stream
+      // visibly progresses — dropping it silently looks like a hang.
+      const reasoning = choice?.delta?.reasoning_content;
+      if (typeof reasoning === "string" && reasoning.length) {
+        yield { delta: "", reasoning };
+      }
+      const delta = choice?.delta?.content;
+      if (typeof delta === "string" && delta.length) {
+        yield { delta };
+      }
     }
+  } finally {
+    // Closes parseSSE's generator → releases the reader lock even when the
+    // watchdog threw while a read was still pending.
+    void it.return?.(undefined);
   }
   yield {
     delta: "",

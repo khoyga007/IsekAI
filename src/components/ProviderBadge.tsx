@@ -7,7 +7,8 @@ const ACCENT: Record<string, string> = {
   openai: "var(--color-jade)",
   google: "var(--color-cyan)",
   openrouter: "var(--color-violet)",
-  deepseek: "var(--color-vermillion)",
+  // DeepSeek brand is blue; vermillion read as an error state to users.
+  deepseek: "var(--color-cyan)",
   ollama: "var(--color-paper-dim)",
 };
 

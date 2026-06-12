@@ -417,10 +417,13 @@ export function parseStory(raw: string): ParsedDoc {
     const end = start + full.length;
     const lc = tag.toLowerCase();
 
-    // Accumulate text since last cursor into the top of the stack
+    // Accumulate text since last cursor into the top of the stack.
+    // Text outside any tag becomes a narration panel — models drifting off
+    // the XML format (long context, high temp) must not lose their prose.
     const chunk = raw.slice(cursor, start);
-    if (stack.length > 0 && chunk.trim()) {
-      stack[stack.length - 1].text += chunk;
+    if (chunk.trim()) {
+      if (stack.length > 0) stack[stack.length - 1].text += chunk;
+      else panels.push({ kind: "narration", text: chunk.trim() });
     }
     cursor = end;
 
@@ -456,9 +459,12 @@ export function parseStory(raw: string): ParsedDoc {
   }
 
   // Flush any unclosed openers (live streaming case).
-  const trailing = raw.slice(cursor);
-  if (stack.length > 0 && trailing.trim()) {
-    stack[stack.length - 1].text += trailing;
+  // Strip a partial tag still being streamed (e.g. "<narr") so it doesn't
+  // flash as visible text mid-stream.
+  const trailing = raw.slice(cursor).replace(/<[a-zA-Z/][^>]*$/, "");
+  if (trailing.trim()) {
+    if (stack.length > 0) stack[stack.length - 1].text += trailing;
+    else panels.push({ kind: "narration", text: trailing.trim() });
   }
 
   for (const open of stack) {
@@ -688,7 +694,11 @@ Keep the whole opening ~5-7 panels. Atmospheric, not exposition-heavy. Show the 
   await streamWithActive({
     messages,
     temperature: 0.85,
-    maxTokens: 1200,
+    // Generous cap: thinking models (DeepSeek V4 Flash default mode) count
+    // their CoT against max_tokens. 1200 used to get eaten entirely by
+    // reasoning on long contexts, leaving zero story text. The prompt keeps
+    // scenes short, so non-thinking models won't actually use this headroom.
+    maxTokens: 4096,
     signal: args.signal,
     onChunk: (d) => { acc += d; args.onDelta?.(acc); },
     onUsage: async (u) => {
@@ -702,6 +712,14 @@ Keep the whole opening ~5-7 panels. Atmospheric, not exposition-heavy. Show the 
       useCampaign.getState().setLastFallback({ from: info.from, to: info.to });
     },
   });
+
+  // An empty result must surface as an error, not silently commit an empty
+  // scene into history (which poisons every later turn's context).
+  if (!acc.trim()) {
+    throw new Error(
+      "Model returned no story text. If you're using a thinking model (e.g. deepseek-v4-flash), its reasoning may have consumed the whole token budget — retry, or switch to a non-thinking model like deepseek-chat.",
+    );
+  }
 
   return { raw: acc, parsed: parseStory(acc) };
 }

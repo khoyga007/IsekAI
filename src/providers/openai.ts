@@ -19,8 +19,9 @@ export const deepseek: Provider = {
   label: "DeepSeek",
   needsKey: true,
   defaultModels: [
-    { id: "deepseek-chat", label: "DeepSeek V3", context: 64000, hint: "General" },
-    { id: "deepseek-reasoner", label: "DeepSeek R1", context: 64000, hint: "Reasoning" },
+    { id: "deepseek-chat", label: "V4 Flash (no thinking)", context: 1000000, hint: "Alias for v4-flash non-thinking — best for roleplay. Deprecated 2026-07-24." },
+    { id: "deepseek-v4-flash", label: "V4 Flash", context: 1000000, hint: "Thinking ON by default — slower, CoT counts against max_tokens" },
+    { id: "deepseek-v4-pro", label: "V4 Pro", context: 1000000, hint: "Stronger, pricier" },
   ],
   stream: (req, cfg) => openAICompatStream("deepseek", "https://api.deepseek.com/v1", req, cfg),
 };
