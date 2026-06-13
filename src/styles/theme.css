@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400;1,700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Be+Vietnam+Pro:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap");
 @import "tailwindcss";
 
 /*
@@ -60,10 +61,7 @@
   --shadow-glow-cyan: 0 0 24px -4px var(--color-cyan);
 }
 
-/* Web fonts — all subsets include Vietnamese (latin-ext + vietnamese).
- * Google Fonts serves the vietnamese subset automatically when the
- * <html lang> or unicode-range matches. */
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400;1,700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Be+Vietnam+Pro:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap");
+
 
 @layer base {
   :root {

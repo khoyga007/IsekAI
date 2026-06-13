@@ -17,13 +17,14 @@ import { MemoryView } from "@/components/MemoryView";
 import { SavesView } from "@/components/SavesView";
 import { SequelView } from "@/components/SequelView";
 import { WorldEditView } from "@/components/WorldEditView";
+import { CharacterSheet } from "@/components/CharacterSheet";
 import { useSettings } from "@/state/settings";
 import { useCampaign } from "@/state/campaign";
 import type { SourceKind } from "@/state/types";
 import { exportCampaign } from "@/lib/export";
 import { useT } from "@/lib/i18n";
 
-type Drawer = "library" | "worldedit" | "cast" | "memory" | "saves" | "sequel" | "settings" | null;
+type Drawer = "library" | "worldedit" | "cast" | "memory" | "saves" | "sequel" | "settings" | "character" | null;
 
 export default function App() {
   const t = useT();
@@ -158,7 +159,7 @@ export default function App() {
         <div className="hairline-v h-full" />
 
         <ErrorBoundary inline label={t("err.panel.hud")} resetKey={campaign?.id ?? "none"}>
-          <DynamicHud />
+          <DynamicHud onOpenCharacter={() => setDrawer("character")} />
         </ErrorBoundary>
       </div>
 
@@ -169,6 +170,7 @@ export default function App() {
       <SavesView open={drawer === "saves"} onClose={closeDrawer} />
       <SequelView open={drawer === "sequel"} onClose={closeDrawer} />
       <WorldEditView open={drawer === "worldedit"} onClose={closeDrawer} />
+      <CharacterSheet open={drawer === "character"} onClose={closeDrawer} />
       <Onboarding
         open={onboardOpen}
         initialKind={onboardKind}

@@ -24,19 +24,25 @@ function iconFor(name?: string): React.ComponentType<any> | null {
   return (Icons as any)[k] ?? null;
 }
 
-export function DynamicHud() {
+export function DynamicHud({ onOpenCharacter }: { onOpenCharacter?: () => void }) {
   const t = useT();
   const c = useCampaign((s) => s.current);
   if (!c) return <EmptyHud />;
 
   return (
     <aside className="relative h-full w-[280px] flex flex-col gap-3 p-4 overflow-y-auto">
-      <div className="glass rounded-xl p-3">
-        <div className="text-[10px] tracking-[0.3em] uppercase" style={{ color: "var(--color-text-dim)" }}>{t("hud.genre")}</div>
-        <div className="font-display text-sm mt-1" style={{ color: "var(--color-paper)" }}>{c.hud.genre}</div>
+      <div className="flex gap-2">
+        <div className="glass rounded-xl p-3 flex-1">
+          <div className="text-[10px] tracking-[0.3em] uppercase" style={{ color: "var(--color-text-dim)" }}>{t("hud.genre")}</div>
+          <div className="font-display text-sm mt-1 line-clamp-1" style={{ color: "var(--color-paper)" }} title={c.hud.genre}>{c.hud.genre}</div>
+        </div>
+        <button onClick={onOpenCharacter} className="glass hover:glass-hi transition rounded-xl p-3 flex flex-col items-center justify-center gap-1 min-w-[72px]" title="View Character">
+          <Icons.User size={16} style={{ color: "var(--color-text-dim)" }} />
+          <span className="text-[9px] uppercase tracking-widest" style={{ color: "var(--color-paper)" }}>Profile</span>
+        </button>
       </div>
 
-      {(c.hud?.widgets ?? []).map((w) => (
+      {(c.hud?.widgets ?? []).filter(w => w.type !== "inventory" && w.type !== "affinity").map((w) => (
         <motion.div
           key={w.id}
           layout
