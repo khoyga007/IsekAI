@@ -11,7 +11,9 @@ import { useSettings } from "@/state/settings";
  *   <act>...</act>                    -- physical action beat
  *   <system>...</system>              -- GM narration / world event
  *   <hud op="set|delta" id="hp" value="-12"/>  -- HUD mutation
- *   <crystal title="..." summary="..."/>       -- pin a memory
+ *   <crystal title="..." summary="..."/>       -- pin a memory (no longer
+ *       prompted — kept in the parser for back-compat with old transcripts;
+ *       context compression now creates crystals instead)
  *
  * Why tags? They stream cleanly (vs. JSON which must be fully balanced),
  * survive partial output, and the parser can flush completed panels live.
@@ -48,8 +50,7 @@ End EVERY turn with exactly ONE <scene/> + 3 <suggest>:
 4. 1-3 sentences per panel. Multiple short panels > one long blob.
 5. Honor the World Bible. If the world forbids it, narrate the failure.
 6. HUD: only update when state materially changed. Use ONLY ids in CURRENT HUD STATE — inventing ids no-ops. Don't track stats the schema doesn't have; narrate them.
-7. <crystal> at most once per 3-5 turns, only for irreversible beats (first meeting that matters, oath, death, betrayal, major reveal).
-   <bible-add> ONLY for major recurring characters/factions/rules invented mid-game. NEVER use for throwaway entities.
+7. <bible-add> ONLY for major recurring characters/factions/rules invented mid-game. NEVER use for throwaway entities.
 8. Both <scene> attrs MUST come from the enums above; do not invent values.
 9. Aim for 4-8 panels per turn. Quality over quantity.
 

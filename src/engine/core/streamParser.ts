@@ -306,41 +306,72 @@ export function panelsToCompact(panels: Panel[]): string {
   }).join("\n");
 }
 
+/** Tokenized, order-insensitive name match (same approach as the AniList
+ *  avatar matcher): "Rinka" matches "Rinka Akatsuki", "Monkey D. Luffy"
+ *  matches "Luffy Monkey". Exact-equality matching created duplicate bible
+ *  entries whenever the model varied the name form between turns. */
+function sameEntity(a: string, b: string): boolean {
+  const tok = (s: string) =>
+    s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").split(/\s+/).filter(Boolean);
+  const ta = tok(a), tb = tok(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+  const sa = new Set(ta), sb = new Set(tb);
+  return ta.every(t => sb.has(t)) || tb.every(t => sa.has(t));
+}
+
+/** Merge an update into an existing desc. Skips updates already present
+ *  (models love re-emitting the same <bible-add> for several turns, and
+ *  every desc change invalidates the stable-prompt cache). */
+function mergeDesc(old: string, update: string): string {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  if (norm(old).includes(norm(update))) return old;
+  return `${old} (Update: ${update})`;
+}
+
 export function applyBibleAdds(c: Campaign, ops: BibleAddOp[]): Campaign {
   if (!ops.length) return c;
   const nextBible = { ...c.bible };
-  
+
   nextBible.keyCharacters = nextBible.keyCharacters ?? [];
   nextBible.factions = nextBible.factions ?? [];
   nextBible.rules = nextBible.rules ?? [];
 
   for (const op of ops) {
     if (op.type === "character") {
-      const idx = nextBible.keyCharacters.findIndex(k => k.name === op.name);
+      const idx = nextBible.keyCharacters.findIndex(k => sameEntity(k.name, op.name));
       if (idx === -1) {
         nextBible.keyCharacters = [...nextBible.keyCharacters, { name: op.name, role: "NPC", desc: op.desc }];
       } else {
         const old = nextBible.keyCharacters[idx];
-        nextBible.keyCharacters = [
-          ...nextBible.keyCharacters.slice(0, idx),
-          { ...old, desc: `${old.desc} (Update: ${op.desc})` },
-          ...nextBible.keyCharacters.slice(idx + 1)
-        ];
+        const merged = mergeDesc(old.desc, op.desc);
+        if (merged !== old.desc) {
+          nextBible.keyCharacters = [
+            ...nextBible.keyCharacters.slice(0, idx),
+            { ...old, desc: merged },
+            ...nextBible.keyCharacters.slice(idx + 1)
+          ];
+        }
       }
     } else if (op.type === "faction") {
-      const idx = nextBible.factions.findIndex(f => f.name === op.name);
+      const idx = nextBible.factions.findIndex(f => sameEntity(f.name, op.name));
       if (idx === -1) {
         nextBible.factions = [...nextBible.factions, { name: op.name, desc: op.desc }];
       } else {
         const old = nextBible.factions[idx];
-        nextBible.factions = [
-          ...nextBible.factions.slice(0, idx),
-          { ...old, desc: `${old.desc} (Update: ${op.desc})` },
-          ...nextBible.factions.slice(idx + 1)
-        ];
+        const merged = mergeDesc(old.desc, op.desc);
+        if (merged !== old.desc) {
+          nextBible.factions = [
+            ...nextBible.factions.slice(0, idx),
+            { ...old, desc: merged },
+            ...nextBible.factions.slice(idx + 1)
+          ];
+        }
       }
     } else if (op.type === "rule") {
-      nextBible.rules = [...nextBible.rules, `${op.name}: ${op.desc}`];
+      const entry = `${op.name}: ${op.desc}`;
+      if (!nextBible.rules.some(r => r.toLowerCase().trim() === entry.toLowerCase().trim())) {
+        nextBible.rules = [...nextBible.rules, entry];
+      }
     }
   }
 
