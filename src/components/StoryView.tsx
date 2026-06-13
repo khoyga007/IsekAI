@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Pencil, Check, X } from "lucide-react";
 import { useCampaign } from "@/state/campaign";
 import { useSettings } from "@/state/settings";
-import type { Panel } from "@/state/types";
+import type { Panel, Scene } from "@/state/types";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/lib/avatar";
 import { chipBus } from "@/lib/chipBus";
@@ -73,18 +73,34 @@ export function StoryView() {
   const lastScene = allScenes.length > 0 ? allScenes[allScenes.length - 1] : null;
   const lastIsRevealing = !draft && !!lastScene && revealId === lastScene.id;
   const committedScenes = lastIsRevealing ? allScenes.slice(0, -1) : allScenes;
+  // Archived scenes are always the oldest prefix (compression eats from the
+  // front). Collapse them behind one divider: keeps the DOM small on long
+  // campaigns and shows the reader where the AI's verbatim memory ends.
+  const firstLive = committedScenes.findIndex((s) => !s.archived);
+  const archivedScenes = firstLive === -1 ? committedScenes : committedScenes.slice(0, firstLive);
+  const liveScenes = firstLive === -1 ? [] : committedScenes.slice(firstLive);
   const showChips = !!lastScene && !streaming && !draft && !lastIsRevealing && (lastScene.suggestions?.length ?? 0) > 0;
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-8 pb-2">
       <div className="max-w-3xl mx-auto flex flex-col gap-10 py-2">
-        {committedScenes.map((s, idx) => (
-          <ScenePage key={s.id} index={idx} sceneIdx={idx} panels={s.panels} input={s.playerInput} editable />
+        {archivedScenes.length > 0 && <ArchivedScenes scenes={archivedScenes} />}
+        {liveScenes.map((s, idx) => (
+          /* index = absolute turn label; sceneIdx = array position for edits.
+             They diverge once context compression archives old scenes. */
+          <ScenePage
+            key={s.id}
+            index={s.turn}
+            sceneIdx={archivedScenes.length + idx}
+            panels={s.panels}
+            input={s.playerInput}
+            editable
+          />
         ))}
         {draft && (
           <ScenePage
             key="reveal"
-            index={allScenes.length}
+            index={lastScene ? lastScene.turn + 1 : 0}
             panels={draft.panels}
             streaming={streaming}
             rawTail={draft.raw}
@@ -98,7 +114,7 @@ export function StoryView() {
              survives the draft→committed swap instead of restarting. */
           <ScenePage
             key="reveal"
-            index={allScenes.length - 1}
+            index={lastScene.turn}
             sceneIdx={allScenes.length - 1}
             panels={lastScene.panels}
             input={lastScene.playerInput}
@@ -143,6 +159,38 @@ function SuggestionChips({ suggestions }: { suggestions: string[] }) {
         </motion.button>
       ))}
     </motion.div>
+  );
+}
+
+/**
+ * Collapsed group of context-compressed scenes. Kept out of the DOM until
+ * expanded — on long campaigns this is most of the story, so the collapse
+ * doubles as cheap virtualization. Read-only: panels this old are already
+ * summarized into crystals, editing them wouldn't reach the model anyway.
+ */
+function ArchivedScenes({ scenes }: { scenes: Scene[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col gap-10">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-3 select-none text-left group"
+        style={{ color: "var(--color-text-dim)" }}
+      >
+        <span className="font-mono text-[10px] tracking-widest transition group-hover:opacity-100 opacity-70">
+          {open ? "▾" : "▸"} {open
+            ? t("story.archived.hide")
+            : t("story.archived.show", { n: String(scenes.length) })}
+        </span>
+        <div className="flex-1 brush-divider" style={{ color: "color-mix(in oklab, var(--color-paper) 8%, transparent)" }} />
+      </button>
+      {open && scenes.map((s) => (
+        <div key={s.id} style={{ opacity: 0.75 }}>
+          <ScenePage index={s.turn} panels={s.panels} input={s.playerInput} />
+        </div>
+      ))}
+    </div>
   );
 }
 

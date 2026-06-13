@@ -122,6 +122,8 @@ const EN: Dict = {
   "panel.btn.save": "Save",
   "panel.btn.cancel": "Cancel",
   "panel.edit.hint": "Edit panel text. Esc to cancel, Ctrl+Enter to save.",
+  "story.archived.show": "{n} archived turns — the GM remembers these only as a summary",
+  "story.archived.hide": "Collapse archived turns",
 
   // Settings
   "settings.title": "Settings",
@@ -389,6 +391,8 @@ const VI: Dict = {
   "panel.btn.save": "Lưu",
   "panel.btn.cancel": "Hủy",
   "panel.edit.hint": "Chỉnh sửa nội dung khung. Esc để hủy, Ctrl+Enter để lưu.",
+  "story.archived.show": "{n} lượt đã lưu trữ — GM chỉ còn nhớ phần này qua bản tóm tắt",
+  "story.archived.hide": "Thu gọn các lượt đã lưu trữ",
 
   // Settings
   "settings.title": "Cài đặt",

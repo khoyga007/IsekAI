@@ -140,6 +140,11 @@ export interface Scene {
   mood?: string;
   /** AI-tagged beat type — action / plot / downtime / banter / romance / sidequest / introspection / worldbuilding. Drives pacing variety. */
   beat?: string;
+  /** True once context compression replaced this scene with a crystal
+   *  summary. Archived scenes are excluded from the model's context but
+   *  kept on disk: the player can still read them (collapsed in
+   *  StoryView), and future retrieval (RAG) can pull them back in. */
+  archived?: boolean;
 }
 
 export interface MemoryCrystal {

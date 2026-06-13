@@ -32,7 +32,9 @@ export async function playTurn(args: PlayTurnArgs): Promise<{ raw: string; parse
 
   const stable = buildSystemPromptStable(c);
   const dynamic = buildSystemPromptDynamic(c);
-  const history = (c.scenes ?? []).flatMap((s: Scene) => {
+  // Archived scenes live on disk for the reader, not for the model — the
+  // crystal summary represents them in the dynamic block instead.
+  const history = (c.scenes ?? []).filter((s: Scene) => !s.archived).flatMap((s: Scene) => {
     const out: { role: "user" | "assistant"; content: string; cache?: boolean }[] = [];
     if (s.playerInput) out.push({ role: "user", content: formatInput(s.playerInput) });
     out.push({ role: "assistant", content: panelsToCompact(s.panels) });
