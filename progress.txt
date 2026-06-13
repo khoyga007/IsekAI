@@ -1,4 +1,4 @@
-IsekAI — progress notes (last updated 2026-06-12)
+IsekAI — progress notes (last updated 2026-06-13)
 ====================================================
 
 For the full picture, read HANDOFF.md. This is just a quick scratchpad for
@@ -6,6 +6,89 @@ For the full picture, read HANDOFF.md. This is just a quick scratchpad for
 
 DONE (2026-06-13)
 -----------------
+[x] Streaming perf pass (Yang: "tối ưu cực hạn") — kills long-turn jank:
+    1. rAF coalesce (InputBar.runTurn): onDelta was parseStory(acc) + new
+       draft-panel array on EVERY SSE chunk (hundreds/turn) = O(n²)
+       re-parse + a full render per chunk. Now the newest acc is held and
+       a single requestAnimationFrame flush parses+renders once per frame
+       (~60fps). Cancelled on stream end + on error/abort; final parse
+       after await is unchanged so the committed result stays exact.
+    2. memo(ScenePage) (StoryView): the view re-renders each frame while
+       the draft grows; committed scenes pass only stable-ref props, so
+       React.memo lets the whole committed-scene subtree skip re-render
+       (the bulk of the DOM on long campaigns). Draft/reveal scene passes
+       fresh callbacks → falls through and updates as needed.
+    3. retrieval.ts archiveIndex cache: tokensPerScene + document-freq map
+       were rebuilt every turn (O(archived × tokens)). Now cached, keyed
+       by the archived id set — recomputes only when compression grows the
+       archive (~every 8 turns). Archived scenes are read-only so tokens
+       can't go stale.
+[x] Toy batch (Yang: "múc hết cho anh") — 5 items shipped:
+    1. Canon-rank HUD mandate: HUD_SYS in worldBuilder.ts now requires a
+       canon power-metric stat-number widget for shonen-battle universes
+       (Bounty / Hero Rank / Cursed Energy Grade / Power Level...), seeded
+       at the protagonist's standing. (closes the OPEN canon-rank item.)
+    2. Keyboard shortcuts (InputBar global keydown, window CustomEvents):
+       Esc = skip typewriter ("isekai:skip"), R = retry, Ctrl/Cmd+Z =
+       undo, Ctrl/Cmd+B = bookmark ("isekai:bookmark"). Listeners in
+       StoryView (skip) + App (bookmark). Guards typing fields, requires
+       a live campaign + not streaming.
+    3. Manga combat SFX: action panels in combat-mood scenes stamp a
+       rotated hand-drawn onomatopoeia (ドンッ / RẦM! / KRẮC!...), hash-
+       seeded per panel so it's stable. mood threaded ScenePage →
+       PanelView → PanelContent, all 3 call sites pass it.
+    4. RecapModal "Previously on...": reopening a campaign after >24h
+       shows an anime recap (days away + last 5 crystals + last 3 panels)
+       before continuing. Pure local data, no LLM. Once per campaign id.
+    5. StatsView studio drawer (new rail item, BarChart3): turns, story/
+       player word counts, crystals, cast, archived count + beat
+       distribution bars. All computed from the campaign on open, no
+       tracking/persistence. i18n EN+VI added (rail.stats, stats.*).
+[x] Juice pass 2 (Yang: "nghĩ thêm đồ chơi"):
+    - MoodFX.tsx (new, mounted in App over Backdrop): screen breathes
+      with scene mood. Tinted edge vignette per mood (combat vermillion,
+      eerie abyss, tragic ash...), one-shot red flare when combat begins,
+      film grain on eerie/mystery, slow falling petals on romantic/
+      tender. Pure CSS/framer, pointer-transparent, no assets.
+    - Character leitmotifs (ambient.ts motif() + StoryView trigger):
+      every named character gets a personal 3-note motif (degrees hashed
+      from name, notes from the active genre scale, in key with current
+      chord) played when their dialogue panel reveals. Same name = same
+      tune every campaign. Throttled: speaker change only, max 1/8s.
+      Gated on typewriter so reloading old scenes stays silent.
+[x] Memory upgrade PHASE 2 SHIPPED: lexical RAG over archived scenes
+    (engine/core/retrieval.ts — do NOT re-implement). Per turn, query =
+    player input + latest live scene; archived scenes scored by token
+    overlap. Signal filtering: bible-known name tokens weigh 3x (but a
+    name present in EVERY archived scene — the protagonist — counts 0);
+    common tokens count only if rare across the archive (document
+    frequency <= 25% of scenes), because the query is hundreds of tokens
+    and raw overlap would match everything. Threshold keeps quiet turns
+    at zero injection. Top scenes (max 5, ~1000 est. tokens) injected
+    verbatim into the dynamic block as "RECALLED SCENES", chronological.
+    No embeddings, no API, fully local. VERIFY IN PLAY: NPC absent 30+
+    turns, mention name → their archived scenes return; generic input →
+    no injection.
+[x] CharacterSheet visibility gap fixed: vermillion badge pulses on the
+    Profile button for 8s when inventory/affinity change (those widgets
+    render only inside the drawer since 49038b2). Clears on click.
+    DynamicHud.tsx.
+[x] Audio-visual juice pass (Yang: "synth ambient = drone noise, HUD
+    changes invisible"):
+    - ambient.ts: generative music instead of static drone. Per-preset
+      chord progression (whole pad glides to next step every ~10s, 2.5s
+      ramp) + sparse generative melody from per-genre scales (penta
+      major/minor, phrygian for horror, whole-tone for mystery), in key
+      with the current chord, occasional fifth-below echo. Mood now also
+      scales melody density (combat busy, eerie sparse). Still 100%
+      synth, zero assets.
+    - DynamicHud.tsx: HUD ops are now visible — floating +N/-N delta
+      (vermillion/jade) on stat bars, stat numbers, affinity rows, item
+      qty; stat-bar flash ring on change; audio cue (low thunk on loss,
+      two-note chime on gain); tag pop-in/out; inventory item slide
+      in/out. Initial mount never flashes.
+    (Inventory/affinity drawer visibility gap fixed same day — see the
+    Profile-badge entry above.)
 [x] Anthropic 2nd cache breakpoint fix (providers/anthropic.ts). Was in
     KNOWN BUGS: hoisting ALL system messages into the `system` param put
     the volatile dynamic block (HUD/crystals) between the stable block
@@ -161,32 +244,12 @@ OPEN / NEXT UP
     Foundations exist: savepoints already support rewind/branch, sequels
     link prevId. Missing: tree UI + multi-timeline storage. Wait for Yang
     to confirm he actually needs forking before building.
-[ ] Memory upgrade PHASE 2: lexical RAG over archived scenes (Yang
-    approved; build after phase 1 proves out). Per turn, retrieve the
-    top 3-5 archived scenes relevant to the player input + latest scene
-    and inject them into the dynamic block. PLAN:
-    - retrieval.ts in engine/core: tokenize (lowercase, strip punct,
-      keep Vietnamese diacritics), score archived scenes by overlap with
-      query tokens. Proper nouns are the anchor — weight capitalized /
-      bible-known names (protagonist, keyCharacters, factions) ~3x over
-      common words. No embeddings, no API, fully local.
-    - Query = player input text + panelsToCompact(last 1-2 scenes).
-    - Inject as "═══ RECALLED SCENES (verbatim from earlier) ═══" section
-      in buildSystemPromptDynamic, capped ~1000 tokens, each entry
-      prefixed [T<turn>]. Dynamic block is uncached on DeepSeek anyway.
-    - Score threshold so quiet turns inject nothing (zero cost).
-    - Test: campaign with NPC absent 30+ turns, mention name → their
-      archived scenes come back; generic input → no injection.
 [ ] StoryView virtualization (Ariel handoff #4) — LARGELY COVERED by the
     archived-scenes collapse (phase 1 above): the archived prefix stays
     out of the DOM until expanded. Only revisit if the LIVE window
     (~last 20-40 scenes at 24k budget) measurably lags. WARNING:
     windowing live scenes conflicts with scroll-follow (ResizeObserver)
     + sequential reveal in StoryView.tsx; coordinate with Claire.
-[ ] Canon-rank HUD widget (Mức 1 from power-system discussion). Edit
-    HUD_SYS in worldBuilder.ts to mandate a stat-number widget for known
-    shonen-battle universes (Bounty / Rank / Grade / Hero Rank / Cursed
-    Energy Grade etc). ~15-30 min effort.
 [ ] WorldEditView avatar editor — let users re-pick avatars after creation.
     Reuse AvatarPicker in "edit existing" mode.
 [ ] HUD op rollback on retry/undo — record inverse ops on Scene so undo

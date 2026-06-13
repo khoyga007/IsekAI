@@ -4,6 +4,7 @@ import { parseStory, type ParsedDoc } from "./core/streamParser";
 import { buildSystemPromptStable, buildSystemPromptDynamic } from "./core/promptBuilder";
 import { compressIfNeeded } from "./core/contextManager";
 import { formatInput, panelsToCompact } from "./core/streamParser";
+import { recallArchivedScenes, formatRecalledScenes } from "./core/retrieval";
 
 /* ---------- Stream wrapper ---------- */
 
@@ -31,7 +32,17 @@ export async function playTurn(args: PlayTurnArgs): Promise<{ raw: string; parse
   }
 
   const stable = buildSystemPromptStable(c);
-  const dynamic = buildSystemPromptDynamic(c);
+  // RAG over archived scenes: query = player input + the latest live scene
+  // (covers "the NPC from the current conversation" even when the player's
+  // own text doesn't name them).
+  const liveScenes = (c.scenes ?? []).filter((s: Scene) => !s.archived);
+  const lastLive = liveScenes[liveScenes.length - 1];
+  const queryText = [
+    args.input?.text ?? "",
+    lastLive ? panelsToCompact(lastLive.panels) : "",
+  ].join(" ");
+  const recalled = recallArchivedScenes(c, queryText);
+  const dynamic = buildSystemPromptDynamic(c, formatRecalledScenes(recalled));
   // Archived scenes live on disk for the reader, not for the model — the
   // crystal summary represents them in the dynamic block instead.
   const history = (c.scenes ?? []).filter((s: Scene) => !s.archived).flatMap((s: Scene) => {

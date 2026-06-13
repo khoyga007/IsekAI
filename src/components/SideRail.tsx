@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
-import { Compass, Users, BookOpen, Sparkles, Settings, Plus, Bookmark } from "lucide-react";
+import { Compass, Users, BookOpen, Sparkles, Settings, Plus, Bookmark, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 
-export type RailKey = "new" | "world" | "characters" | "story" | "memory" | "saves" | "settings";
+export type RailKey = "new" | "world" | "characters" | "story" | "memory" | "saves" | "stats" | "settings";
 
 interface NavItem {
   key: RailKey;
@@ -18,6 +18,7 @@ const ITEMS: NavItem[] = [
   { key: "story",      icon: BookOpen,  labelKey: "rail.story" },
   { key: "memory",     icon: Sparkles,  labelKey: "rail.memory" },
   { key: "saves",      icon: Bookmark,  labelKey: "rail.saves" },
+  { key: "stats",      icon: BarChart3, labelKey: "rail.stats" },
   { key: "settings",   icon: Settings,  labelKey: "rail.settings" },
 ];
 

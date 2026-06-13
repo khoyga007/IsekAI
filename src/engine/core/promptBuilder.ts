@@ -353,7 +353,7 @@ ${buildPowerBlock(c)}`;
  * no pacing nudge). The caller can then skip the system message entirely
  * to save tokens on early-game turns.
  */
-export function buildSystemPromptDynamic(c: Campaign): string {
+export function buildSystemPromptDynamic(c: Campaign, recalledBlock?: string): string {
   const huds = (c.hud?.widgets ?? []).map(w => {
     if (w.type === "stat-bar") return `  - ${w.id} (stat-bar "${w.label}"): ${w.value}/${w.max}`;
     if (w.type === "stat-number") return `  - ${w.id} (stat-number "${w.label}"): ${w.value}`;
@@ -377,6 +377,9 @@ export function buildSystemPromptDynamic(c: Campaign): string {
   if (pacingHint) sections.push(pacingHint);
   if (huds) sections.push(`═══ CURRENT HUD STATE ═══\n${huds}`);
   if (crystals) sections.push(`═══ MEMORY CRYSTALS (key past events) ═══\n${crystals}`);
+  // Lexical RAG: verbatim archived scenes relevant to this turn's input.
+  // Computed in playTurn (needs the player input); empty most turns.
+  if (recalledBlock) sections.push(recalledBlock);
   // Format reminder lives HERE (after the long compact history, right before
   // the user input) because on long campaigns the model starts imitating the
   // tagless compact history and silently drops the <scene/> + <suggest>

@@ -71,18 +71,30 @@ export function InputBar() {
     abortRef.current = ac;
 
     beginTurn();
+    // Streaming arrives in many small SSE chunks (hundreds per turn). Parsing
+    // the WHOLE accumulated string + re-rendering on every chunk is O(n²) and
+    // janks long turns. Coalesce to one parse+render per animation frame:
+    // latestAcc holds the newest text, a single pending rAF flushes it.
+    let latestAcc = "";
+    let rafId: number | null = null;
+    const flush = () => {
+      rafId = null;
+      appendDraftRaw(latestAcc.slice(useCampaign.getState().draft?.raw.length ?? 0));
+      setDraftPanels(parseStory(latestAcc).panels);
+    };
+    const cancelFlush = () => { if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; } };
     try {
       const { raw, parsed } = await playTurn({
         campaign: c,
         input,
         signal: ac.signal,
         onDelta: (acc) => {
-          appendDraftRaw(acc.slice(useCampaign.getState().draft?.raw.length ?? 0));
-          const partial = parseStory(acc);
-          setDraftPanels(partial.panels);
+          latestAcc = acc;
+          if (rafId === null) rafId = requestAnimationFrame(flush);
         },
       });
 
+      cancelFlush();
       setDraftPanels(parsed.panels);
       const afterHud = applyHudOps(c, parsed.hudOps);
       const afterBible = applyBibleAdds(afterHud, parsed.bibleAdds);
@@ -97,6 +109,7 @@ export function InputBar() {
       }
       void raw;
     } catch (e: any) {
+      cancelFlush();
       if (e?.name !== "AbortError") setErr(e?.message ?? String(e));
       useCampaign.setState({ draft: null, streaming: false });
     }
@@ -108,6 +121,49 @@ export function InputBar() {
     setText("");
     void runTurn({ mode, text: t2 });
   }
+
+  async function doUndo() {
+    if (!confirm(t("input.confirm.undo"))) return;
+    const restored = await undoLastScene();
+    if (restored) { setMode(restored.mode); setText(restored.text); }
+  }
+
+  async function doRetry() {
+    if (!confirm(t("input.confirm.retry"))) return;
+    // Pop the last scene (restoring its input) and immediately re-stream
+    // with that same input. [ADVANCE] turns (no input) re-run as advance.
+    const restored = await undoLastScene();
+    await runTurn(restored ? { mode: restored.mode, text: restored.text } : null);
+  }
+
+  // Global shortcuts: Esc = skip reveal (works even while typing),
+  // R = retry, Ctrl/Cmd+Z = undo, Ctrl/Cmd+B = bookmark.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        window.dispatchEvent(new CustomEvent("isekai:skip"));
+        return;
+      }
+      const el = document.activeElement as HTMLElement | null;
+      const typing = !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
+      if (typing) return;
+      const s = useCampaign.getState();
+      if (!s.current || s.streaming || s.current.scenes.length === 0) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        void doUndo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("isekai:bookmark"));
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        void doRetry();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function stop() {
     abortRef.current?.abort();
@@ -227,30 +283,19 @@ export function InputBar() {
           <motion.button
             whileTap={{ scale: 0.94 }}
             disabled={disabled || !campaign?.scenes.length}
-            onClick={async () => {
-              if (!confirm(t("input.confirm.undo"))) return;
-              const restored = await undoLastScene();
-              if (restored) { setMode(restored.mode); setText(restored.text); }
-            }}
+            onClick={() => void doUndo()}
             className="grid place-items-center w-9 h-9 rounded-lg glass hover:glass-hi transition disabled:opacity-40"
-            title={t("input.btn.undo")}
+            title={`${t("input.btn.undo")} (Ctrl+Z)`}
           >
             <Undo2 size={15} />
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.94 }}
             disabled={disabled || !campaign?.scenes.length}
-            onClick={async () => {
-              if (!confirm(t("input.confirm.retry"))) return;
-              // Pop the last scene (restoring its input) and immediately
-              // re-stream with that same input. If the popped scene was an
-              // [ADVANCE] turn (no input), re-run as advance.
-              const restored = await undoLastScene();
-              await runTurn(restored ? { mode: restored.mode, text: restored.text } : null);
-            }}
+            onClick={() => void doRetry()}
             className="grid place-items-center w-9 h-9 rounded-lg glass hover:glass-hi transition disabled:opacity-40"
             style={{ color: "var(--color-violet)" }}
-            title={t("input.btn.retry")}
+            title={`${t("input.btn.retry")} (R)`}
           >
             <RotateCcw size={14} />
           </motion.button>

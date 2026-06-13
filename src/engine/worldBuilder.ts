@@ -89,6 +89,12 @@ Guidelines by genre:
 - Cyberpunk / noir: HP, cred (currency stat-number), heat (stat-bar), augments (inventory), contacts (affinity).
 - Slice of life: mood, current task, friends affinity.
 - Horror: sanity bar, light/visibility tag-list, items.
+- Known shonen-battle universe with a canonical power metric: you MUST add
+  one stat-number widget for it, labeled exactly as canon calls it — Bounty
+  (One Piece), Hero Rank (MHA/OPM), Cursed Energy Grade (JJK), Hunter Rank,
+  Power Level (DBZ), Guild/Adventurer Rank... Start at the protagonist's
+  current standing (canon char = canon value, fresh OC = bottom rung). This
+  is the most identity-defining number of those worlds — never omit it.
 
 Return 3-6 widgets total. ONLY JSON.{LANG}`;
 

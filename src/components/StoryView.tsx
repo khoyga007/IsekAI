@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Pencil, Check, X } from "lucide-react";
 import { useCampaign } from "@/state/campaign";
@@ -9,6 +9,7 @@ import { Avatar } from "@/lib/avatar";
 import { chipBus } from "@/lib/chipBus";
 import { useTypewriter } from "@/lib/typewriter";
 import { useT } from "@/lib/i18n";
+import { ambient } from "@/audio/ambient";
 
 /**
  * StoryView — vertical scrolling manga page.
@@ -37,6 +38,13 @@ export function StoryView() {
   useEffect(() => {
     if (streaming) setSkipDraft(false);
   }, [streaming]);
+
+  // Esc anywhere = skip the reveal (dispatched by the InputBar key handler).
+  useEffect(() => {
+    const onSkip = () => setSkipDraft(true);
+    window.addEventListener("isekai:skip", onSkip);
+    return () => window.removeEventListener("isekai:skip", onSkip);
+  }, []);
 
   // When the draft commits, keep revealing the resulting scene in place.
   useEffect(() => {
@@ -94,6 +102,7 @@ export function StoryView() {
             sceneIdx={archivedScenes.length + idx}
             panels={s.panels}
             input={s.playerInput}
+            mood={s.mood}
             editable
           />
         ))}
@@ -118,6 +127,7 @@ export function StoryView() {
             sceneIdx={allScenes.length - 1}
             panels={lastScene.panels}
             input={lastScene.playerInput}
+            mood={lastScene.mood}
             typewriter={typewriterEnabled}
             skip={skipDraft}
             onSkip={() => setSkipDraft(true)}
@@ -187,14 +197,20 @@ function ArchivedScenes({ scenes }: { scenes: Scene[] }) {
       </button>
       {open && scenes.map((s) => (
         <div key={s.id} style={{ opacity: 0.75 }}>
-          <ScenePage index={s.turn} panels={s.panels} input={s.playerInput} />
+          <ScenePage index={s.turn} panels={s.panels} input={s.playerInput} mood={s.mood} />
         </div>
       ))}
     </div>
   );
 }
 
-function ScenePage({
+// memo: during streaming the StoryView re-renders every animation frame as the
+// draft grows. Committed scenes pass only stable-ref props (panels, input from
+// the unchanged store object), so memo lets the whole committed-scene subtree
+// skip re-render — the bulk of the DOM on long campaigns. The draft/reveal
+// scene passes fresh callbacks each render, so it falls through and updates as
+// it must.
+const ScenePage = memo(function ScenePage({
   index,
   sceneIdx,
   panels,
@@ -206,6 +222,7 @@ function ScenePage({
   onSkip,
   onRevealDone,
   editable,
+  mood,
 }: {
   index: number;
   /** When set, panels in this scene are committed and editable. Omit for draft scene. */
@@ -220,6 +237,8 @@ function ScenePage({
   /** Fired once every panel has fully typed out (committed-reveal scene only). */
   onRevealDone?: () => void;
   editable?: boolean;
+  /** Scene mood — drives decorative SFX text on action panels in combat. */
+  mood?: string;
 }) {
   // Sequential reveal: only panels up to the first still-typing one render,
   // so later panels can't spoil the scene while an earlier one is typing.
@@ -271,6 +290,7 @@ function ScenePage({
             panelIdx={i}
             editable={!!editable}
             onTyped={() => setTypedCount((n) => Math.max(n, i + 1))}
+            mood={mood}
           />
         ))}
         {streaming && panels.length === 0 && rawTail !== undefined && (
@@ -282,7 +302,7 @@ function ScenePage({
       </div>
     </article>
   );
-}
+});
 
 function PlayerInputCard({ mode, text }: { mode: string; text: string }) {
   const accent =
@@ -320,6 +340,7 @@ function PanelView({
   panelIdx,
   editable,
   onTyped,
+  mood,
 }: {
   panel: Panel;
   typewriter?: boolean;
@@ -328,6 +349,7 @@ function PanelView({
   panelIdx?: number;
   editable?: boolean;
   onTyped?: () => void;
+  mood?: string;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing && sceneIdx !== undefined && panelIdx !== undefined) {
@@ -343,7 +365,7 @@ function PanelView({
   const canEdit = editable && sceneIdx !== undefined && panelIdx !== undefined;
   return (
     <div className="relative group">
-      <PanelContent panel={panel} typewriter={typewriter} skip={skip} onTyped={onTyped} />
+      <PanelContent panel={panel} typewriter={typewriter} skip={skip} onTyped={onTyped} mood={mood} />
       {canEdit && <PanelEditButton onClick={() => setEditing(true)} />}
     </div>
   );
@@ -450,7 +472,21 @@ function PanelEditor({
   );
 }
 
-function PanelContent({ panel, typewriter, skip, onTyped }: { panel: Panel; typewriter?: boolean; skip?: boolean; onTyped?: () => void }) {
+// Decorative manga onomatopoeia for combat action panels. Mixed JP/VN —
+// IsekAI is a manga app, katakana SFX are part of the visual language.
+const COMBAT_SFX = ["ドンッ", "ザシュッ", "ガキィン", "ドガッ", "バンッ", "RẦM!", "XOẸT!", "BÙM!", "VÚT!", "KRẮC!"];
+
+function sfxFor(text: string): { word: string; rotate: number; right: boolean } {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+  return {
+    word: COMBAT_SFX[h % COMBAT_SFX.length],
+    rotate: ((h >> 4) % 21) - 10,           // -10..10deg
+    right: ((h >> 8) & 1) === 1,
+  };
+}
+
+function PanelContent({ panel, typewriter, skip, onTyped, mood }: { panel: Panel; typewriter?: boolean; skip?: boolean; onTyped?: () => void; mood?: string }) {
   const text = useTypewriter(panel.text, !!typewriter, !!skip);
   // Must be called unconditionally: panels are keyed by index and a draft
   // panel can change KIND between stream chunks (re-parse + splitting), so
@@ -464,6 +500,11 @@ function PanelContent({ panel, typewriter, skip, onTyped }: { panel: Panel; type
   useEffect(() => {
     if (typedOut) onTyped?.();
   }, [typedOut, onTyped]);
+  // Character leitmotif when a dialogue panel reveals. Gated on typewriter
+  // so reloading old scenes stays silent; throttling lives in ambient.
+  useEffect(() => {
+    if (typewriter && panel.kind === "dialogue" && panel.speaker) ambient.motif(panel.speaker);
+  }, [typewriter, panel.kind, panel.speaker]);
   const isPartial = !!typewriter && text.length < panel.text.length;
   const cursor = isPartial ? (
     <span
@@ -491,6 +532,7 @@ function PanelContent({ panel, typewriter, skip, onTyped }: { panel: Panel; type
     );
   }
   if (panel.kind === "action") {
+    const sfx = mood === "combat" ? sfxFor(panel.text) : null;
     return (
       <motion.div
         initial={{ opacity: 0, x: -8 }}
@@ -502,6 +544,25 @@ function PanelContent({ panel, typewriter, skip, onTyped }: { panel: Panel; type
           clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px))",
         }}
       >
+        {sfx && (
+          <motion.span
+            initial={{ scale: 1.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 0.5 }}
+            transition={{ type: "spring", stiffness: 320, damping: 16 }}
+            className="absolute font-display font-black select-none pointer-events-none"
+            style={{
+              fontSize: "28px",
+              top: -10,
+              ...(sfx.right ? { right: 18 } : { left: 18 }),
+              transform: `rotate(${sfx.rotate}deg)`,
+              color: "var(--color-vermillion)",
+              WebkitTextStroke: "1px color-mix(in oklab, var(--color-void) 60%, transparent)",
+              textShadow: "0 2px 8px rgba(0,0,0,0.45)",
+            }}
+          >
+            {sfx.word}
+          </motion.span>
+        )}
         <span className="absolute top-2 right-3 text-[9px] font-mono tracking-widest uppercase" style={{ color: "var(--color-cyan)" }}>ACT</span>
         <p className="text-sm leading-relaxed" style={{ color: "var(--color-paper)" }}>{text}{cursor}</p>
       </motion.div>

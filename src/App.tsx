@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, FileDown, Bookmark, FastForward } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Backdrop } from "@/components/Backdrop";
+import { MoodFX } from "@/components/MoodFX";
+import { RecapModal } from "@/components/RecapModal";
 import { SideRail, type RailKey } from "@/components/SideRail";
 import { TopBar } from "@/components/TopBar";
 import { Stage } from "@/components/Stage";
@@ -18,13 +20,14 @@ import { SavesView } from "@/components/SavesView";
 import { SequelView } from "@/components/SequelView";
 import { WorldEditView } from "@/components/WorldEditView";
 import { CharacterSheet } from "@/components/CharacterSheet";
+import { StatsView } from "@/components/StatsView";
 import { useSettings } from "@/state/settings";
 import { useCampaign } from "@/state/campaign";
 import type { SourceKind } from "@/state/types";
 import { exportCampaign } from "@/lib/export";
 import { useT } from "@/lib/i18n";
 
-type Drawer = "library" | "worldedit" | "cast" | "memory" | "saves" | "sequel" | "settings" | "character" | null;
+type Drawer = "library" | "worldedit" | "cast" | "memory" | "saves" | "sequel" | "settings" | "character" | "stats" | null;
 
 export default function App() {
   const t = useT();
@@ -32,6 +35,8 @@ export default function App() {
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [onboardKind, setOnboardKind] = useState<SourceKind>("title");
+  const [recapOpen, setRecapOpen] = useState(false);
+  const recapShownRef = useRef<Set<string>>(new Set());
 
   const hydrateSettings = useSettings((s) => s.hydrate);
   const hydratedSettings = useSettings((s) => s.hydrated);
@@ -69,6 +74,8 @@ export default function App() {
       setDrawer("memory");
     } else if (active === "saves") {
       setDrawer("saves");
+    } else if (active === "stats") {
+      setDrawer("stats");
     } else if (active === "settings") {
       setDrawer("settings");
     }
@@ -94,10 +101,32 @@ export default function App() {
     await bookmark(label);
     setDrawer("saves");
   };
+  // "Previously on..." recap when reopening a campaign after >24h away.
+  // Keyed per campaign id so switching back and forth doesn't re-show it.
+  useEffect(() => {
+    const c = useCampaign.getState().current;
+    if (!c || c.scenes.length === 0) return;
+    if (Date.now() - c.updatedAt < 86_400_000) return;
+    if (recapShownRef.current.has(c.id)) return;
+    recapShownRef.current.add(c.id);
+    setRecapOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id]);
+
+  // Ctrl/Cmd+B from anywhere (dispatched by the InputBar key handler).
+  const bookmarkRef = useRef(onQuickBookmark);
+  bookmarkRef.current = onQuickBookmark;
+  useEffect(() => {
+    const h = () => void bookmarkRef.current();
+    window.addEventListener("isekai:bookmark", h);
+    return () => window.removeEventListener("isekai:bookmark", h);
+  }, []);
 
   return (
     <div className="relative h-screen w-screen flex">
       <Backdrop />
+      <MoodFX />
+      {recapOpen && campaign && <RecapModal campaign={campaign} onClose={() => setRecapOpen(false)} />}
 
       <div className="relative z-10 flex w-full">
         <SideRail active={active} onChange={setActive} />
@@ -171,6 +200,7 @@ export default function App() {
       <SequelView open={drawer === "sequel"} onClose={closeDrawer} />
       <WorldEditView open={drawer === "worldedit"} onClose={closeDrawer} />
       <CharacterSheet open={drawer === "character"} onClose={closeDrawer} />
+      <StatsView open={drawer === "stats"} onClose={closeDrawer} />
       <Onboarding
         open={onboardOpen}
         initialKind={onboardKind}

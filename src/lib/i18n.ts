@@ -18,6 +18,7 @@ const EN: Dict = {
   "rail.story": "Story",
   "rail.memory": "Memory",
   "rail.saves": "Saves",
+  "rail.stats": "Stats",
   "rail.settings": "Settings",
 
   // Topbar / header
@@ -124,6 +125,22 @@ const EN: Dict = {
   "panel.edit.hint": "Edit panel text. Esc to cancel, Ctrl+Enter to save.",
   "story.archived.show": "{n} archived turns — the GM remembers these only as a summary",
   "story.archived.hide": "Collapse archived turns",
+  "recap.title": "Previously on",
+  "recap.away": "You were away {d} day(s). Here's where things stand.",
+  "recap.crystals": "Key events",
+  "recap.last": "Where we left off",
+  "recap.continue": "Continue the story",
+
+  // Stats studio
+  "stats.title": "Studio Stats",
+  "stats.empty": "No campaign open.",
+  "stats.turns": "Turns",
+  "stats.storyWords": "Story words",
+  "stats.playerWords": "Your words",
+  "stats.crystals": "Crystals",
+  "stats.cast": "Cast",
+  "stats.archived": "Archived",
+  "stats.beats": "Beat distribution",
 
   // Settings
   "settings.title": "Settings",
@@ -287,6 +304,7 @@ const VI: Dict = {
   "rail.story": "Truyện",
   "rail.memory": "Ký ức",
   "rail.saves": "Lưu",
+  "rail.stats": "Thống kê",
   "rail.settings": "Cài đặt",
 
   // Topbar / header
@@ -393,6 +411,22 @@ const VI: Dict = {
   "panel.edit.hint": "Chỉnh sửa nội dung khung. Esc để hủy, Ctrl+Enter để lưu.",
   "story.archived.show": "{n} lượt đã lưu trữ — GM chỉ còn nhớ phần này qua bản tóm tắt",
   "story.archived.hide": "Thu gọn các lượt đã lưu trữ",
+  "recap.title": "Ở tập trước",
+  "recap.away": "Anh đã vắng mặt {d} ngày. Tình hình hiện tại đây.",
+  "recap.crystals": "Sự kiện then chốt",
+  "recap.last": "Đoạn dừng lần trước",
+  "recap.continue": "Chơi tiếp",
+
+  // Stats studio
+  "stats.title": "Thống kê xưởng truyện",
+  "stats.empty": "Chưa mở campaign nào.",
+  "stats.turns": "Lượt",
+  "stats.storyWords": "Số từ truyện",
+  "stats.playerWords": "Từ của anh",
+  "stats.crystals": "Crystal",
+  "stats.cast": "Nhân vật",
+  "stats.archived": "Đã lưu trữ",
+  "stats.beats": "Phân bố beat",
 
   // Settings
   "settings.title": "Cài đặt",
