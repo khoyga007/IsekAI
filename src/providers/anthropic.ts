@@ -30,7 +30,19 @@ export const anthropic: Provider = {
     //
     // Both system messages and user/assistant messages must use the array
     // content form to carry cache_control. Plain strings work for non-cached.
-    const sysMsgs = req.messages.filter((m) => m.role === "system");
+    //
+    // Only the LEADING system messages are hoisted into the `system` param.
+    // Hoisting every system message would silently reorder the prompt: the
+    // volatile dynamic block (HUD/crystals, emitted AFTER history) would land
+    // between the stable block and history in the real prefix, so the history
+    // breakpoint missed whenever HUD changed (1.25x write instead of 0.1x
+    // read). Mid-conversation system messages are folded into the next user
+    // message instead, preserving the true prefix order.
+    const sysMsgs: typeof req.messages = [];
+    let lead = 0;
+    while (lead < req.messages.length && req.messages[lead].role === "system") {
+      sysMsgs.push(req.messages[lead++]);
+    }
     const systemBlocks = sysMsgs.map((m) => {
       const block: Record<string, unknown> = { type: "text", text: m.content };
       if (m.cache) block.cache_control = { type: "ephemeral" };
@@ -42,19 +54,31 @@ export const anthropic: Provider = {
         ? sysMsgs[0].content                  // legacy plain string when no caching needed
         : systemBlocks;
 
-    const messages = req.messages
-      .filter((m) => m.role !== "system")
-      .map((m) => {
-        if (m.cache) {
-          return {
-            role: m.role,
-            content: [
-              { type: "text", text: m.content, cache_control: { type: "ephemeral" } },
-            ],
-          };
-        }
-        return { role: m.role, content: m.content };
-      });
+    const messages: { role: string; content: unknown }[] = [];
+    let pendingSys: string[] = [];
+    for (const m of req.messages.slice(lead)) {
+      if (m.role === "system") { pendingSys.push(m.content); continue; }
+      let content = m.content;
+      if (m.role === "user" && pendingSys.length > 0) {
+        content = `${pendingSys.join("\n\n")}\n\n${content}`;
+        pendingSys = [];
+      }
+      if (m.cache) {
+        messages.push({
+          role: m.role,
+          content: [
+            { type: "text", text: content, cache_control: { type: "ephemeral" } },
+          ],
+        });
+      } else {
+        messages.push({ role: m.role, content });
+      }
+    }
+    // Trailing system message with no user after it — shouldn't happen in
+    // the play flow, but don't silently drop content if a caller does it.
+    if (pendingSys.length > 0) {
+      messages.push({ role: "user", content: pendingSys.join("\n\n") });
+    }
 
     const url = `${cfg.baseUrl ?? DEFAULT_BASE}/v1/messages`;
     const res = await smartFetch(url, {
