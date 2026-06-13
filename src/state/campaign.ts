@@ -23,7 +23,10 @@ function healCampaign(c: Campaign): Campaign {
       ...c.hud,
       widgets: (c.hud?.widgets ?? []).map(sanitizeWidget),
     },
-    scenes: c.scenes ?? [],
+    // Backfill absolute turn numbers on saves from before Scene.turn existed.
+    // Without this, `scenes[last].turn + 1` is NaN on every old campaign
+    // (TopBar chapter, bookmark labels, crystal pins all break).
+    scenes: (c.scenes ?? []).map((s, i) => (typeof s.turn === "number" ? s : { ...s, turn: i })),
     crystals: c.crystals ?? [],
   };
 }
