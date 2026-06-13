@@ -6,6 +6,47 @@ For the full picture, read HANDOFF.md. This is just a quick scratchpad for
 
 DONE (2026-06-13)
 -----------------
+[x] Anthropic 2nd cache breakpoint fix (providers/anthropic.ts). Was in
+    KNOWN BUGS: hoisting ALL system messages into the `system` param put
+    the volatile dynamic block (HUD/crystals) between the stable block
+    and history in the real prefix → history breakpoint missed whenever
+    HUD changed (1.25x write instead of 0.1x read). Now only LEADING
+    system messages are hoisted; mid-conversation system messages fold
+    into the next user message, preserving true prefix order. Matters
+    now that TOKEN_BUDGET is 24k — long Claude campaigns would have paid
+    full input price almost every turn.
+[x] Long-term memory upgrade, phase 1 of 2 (Yang approved roadmap):
+    (1) TOKEN_BUDGET 5500 → 24000 (contextManager.ts). Forgetting started
+    around turn ~15-20 — source of most consistency complaints. Prefix
+    caching keeps the cost increase small.
+    (2) Scene archiving. compressIfNeeded now MARKS compressed scenes
+    archived:true instead of deleting them. Model context excludes them
+    (playTurn history filter; crystal still represents them) — zero token
+    change. StoryView collapses the archived prefix behind one divider
+    ("N archived turns — GM remembers these only as a summary", i18n
+    EN/VI), expandable read-only. Doubles as cheap virtualization (Ariel
+    handoff #4 — largely covered now). Scenes already deleted by old
+    compression are unrecoverable. types.ts, contextManager.ts,
+    storyEngine.ts, StoryView.tsx, i18n.ts.
+[x] Crystal/auto-evo audit fixes (post-Ariel-540bea3 cleanup):
+    (1) <crystal> removal finished — rule 7 in STORY_SYS still taught the
+    tag after its syntax line was removed (model saw the name, not the
+    syntax → malformed output risk). Fully removed; parser keeps the tag
+    for back-compat, compression is now the only crystal source.
+    (2) ScenePage "TURN NN" label used array index, wrong after context
+    compression drops old scenes — now uses absolute s.turn (sceneIdx
+    stays array-based for edits). Same class as Ariel's TopBar fix.
+    (3) applyBibleAdds dedupe: identical (Update: ...) no longer appended
+    repeatedly (models re-emit the same bible-add for turns; every desc
+    change invalidates the stable-prompt cache), duplicate rules skipped.
+    (4) bible name matching now tokenized order-insensitive ("Rinka" ==
+    "Rinka Akatsuki") instead of exact equality — was creating duplicate
+    entries. promptBuilder.ts, StoryView.tsx, streamParser.ts.
+[x] Scene.turn backfill for old saves (campaign.ts healCampaign). Absolute
+    turn numbering (540bea3) reads `scenes[last].turn + 1`, but campaigns
+    saved before the field existed have no `turn` → NaN in TopBar chapter,
+    bookmark labels, crystal pins, commitTurn. healCampaign now backfills
+    turn=index when missing.
 [x] Streaming-read UX overhaul (StoryView.tsx). Three interacting bugs:
     (1) auto-scroll yanked view to bottom on every chunk even while user
     was reading above; (2) ALL draft panels typewrote in parallel so later
@@ -115,6 +156,33 @@ DONE (Phase 6, 2026-04-29 session)
 
 OPEN / NEXT UP
 --------------
+[ ] Story Branching Tree (Ariel handoff D:\AI-Shared\isekai_ideas_handoff.md
+    #2). Git-style tree UI: fork from past turns, parallel timelines.
+    Foundations exist: savepoints already support rewind/branch, sequels
+    link prevId. Missing: tree UI + multi-timeline storage. Wait for Yang
+    to confirm he actually needs forking before building.
+[ ] Memory upgrade PHASE 2: lexical RAG over archived scenes (Yang
+    approved; build after phase 1 proves out). Per turn, retrieve the
+    top 3-5 archived scenes relevant to the player input + latest scene
+    and inject them into the dynamic block. PLAN:
+    - retrieval.ts in engine/core: tokenize (lowercase, strip punct,
+      keep Vietnamese diacritics), score archived scenes by overlap with
+      query tokens. Proper nouns are the anchor — weight capitalized /
+      bible-known names (protagonist, keyCharacters, factions) ~3x over
+      common words. No embeddings, no API, fully local.
+    - Query = player input text + panelsToCompact(last 1-2 scenes).
+    - Inject as "═══ RECALLED SCENES (verbatim from earlier) ═══" section
+      in buildSystemPromptDynamic, capped ~1000 tokens, each entry
+      prefixed [T<turn>]. Dynamic block is uncached on DeepSeek anyway.
+    - Score threshold so quiet turns inject nothing (zero cost).
+    - Test: campaign with NPC absent 30+ turns, mention name → their
+      archived scenes come back; generic input → no injection.
+[ ] StoryView virtualization (Ariel handoff #4) — LARGELY COVERED by the
+    archived-scenes collapse (phase 1 above): the archived prefix stays
+    out of the DOM until expanded. Only revisit if the LIVE window
+    (~last 20-40 scenes at 24k budget) measurably lags. WARNING:
+    windowing live scenes conflicts with scroll-follow (ResizeObserver)
+    + sequential reveal in StoryView.tsx; coordinate with Claire.
 [ ] Canon-rank HUD widget (Mức 1 from power-system discussion). Edit
     HUD_SYS in worldBuilder.ts to mandate a stat-number widget for known
     shonen-battle universes (Bounty / Rank / Grade / Hero Rank / Cursed
@@ -136,15 +204,6 @@ KNOWN BUGS / WATCHLIST
   mandate at least 3 key chars even when protagonist is OC.
 - Retry button does NOT roll back HUD ops (HP delta would apply twice).
   Pre-existing limitation; documented but not fixed.
-- Anthropic 2nd cache breakpoint defeated during PLAY: providers/anthropic.ts
-  hoists ALL system messages into the `system` param (before `messages`), so
-  the volatile dynamic block (HUD state) sits between the stable block and
-  history in the real prefix → history breakpoint misses whenever HUD
-  changes (pays 1.25x write instead of 0.1x read). Stable block still hits.
-  Irrelevant for world build (one-shot) and for OpenAI/DeepSeek (message-
-  order prefix caching — dynamic correctly placed after history there).
-  Fix when someone plays long campaigns on Claude: merge dynamic block into
-  the final user message for the Anthropic provider (~10 lines).
 
 DESIGN NOTES (carried from session discussion)
 ----------------------------------------------
