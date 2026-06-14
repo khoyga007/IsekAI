@@ -37,8 +37,8 @@ function healCompactFormat(raw: string): string {
   if (/<(narrate|act|say|think|system)[\s>]/i.test(raw)) return raw;
   let out = raw;
   out = out.replace(/\[([^\]]+)\]/g, "<act>$1</act>");
-  out = out.replace(/([^\.\!\?\n:]{2,50}):\s*"{1,2}(.*?)"{1,2}/g, (_, speaker, text) => `<say speaker="${speaker.trim()}">${text.trim()}</say>`);
-  out = out.replace(/\(([^\.\!\?\n:]{2,50}):\s*([^)]+?)\)/g, (_, speaker, text) => `<think speaker="${speaker.trim()}">${text.trim()}</think>`);
+  out = out.replace(/([^\.\!\?\n:,;\-]{2,30}):\s*"{1,2}(.*?)"{1,2}/g, (_, speaker, text) => `<say speaker="${speaker.trim()}">${text.trim()}</say>`);
+  out = out.replace(/\(([^\.\!\?\n:,;\-]{2,30}):\s*([^)]+?)\)/g, (_, speaker, text) => `<think speaker="${speaker.trim()}">${text.trim()}</think>`);
   out = out.replace(/~\s*([^~]+?)\s*~/g, "<system>$1</system>");
 
   // Heal split dialogue: <say speaker="X">...</say> — action — "more dialogue"

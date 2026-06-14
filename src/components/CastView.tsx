@@ -12,7 +12,15 @@ export function CastView({ open, onClose }: Props) {
   // Discover speakers organically from played scenes — these may include
   // characters the world bible never named.
   const seen = new Set<string>();
-  c?.scenes.forEach((s) => s.panels.forEach((p) => { if (p.speaker) seen.add(p.speaker); }));
+  c?.scenes.forEach((s) => s.panels.forEach((p) => {
+    if (p.speaker && p.speaker.length < 30 && !p.speaker.includes(",")) {
+      const cleanSpeaker = p.speaker.trim();
+      const isShortName = cleanSpeaker.split(/\s+/).length <= 4;
+      if (isShortName && cleanSpeaker !== c.protagonist.name) {
+        seen.add(cleanSpeaker);
+      }
+    }
+  }));
   const fromBible = new Map(c?.bible?.keyCharacters?.map((k) => [k.name, k]) ?? []);
   const all: { name: string; role?: string; desc?: string; avatar?: string; met: boolean }[] = [];
   fromBible.forEach((v, name) => all.push({ name, role: v.role, desc: v.desc, avatar: v.avatar, met: seen.has(name) }));
