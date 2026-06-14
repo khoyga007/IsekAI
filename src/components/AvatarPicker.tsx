@@ -42,12 +42,13 @@ interface SlotState {
 interface Props {
   campaign: Campaign;
   sourceKind: SourceKind;
+  mode?: "onboarding" | "edit";
   onConfirm: (avatars: { protagonist?: string; keyCharacters: Record<string, string | undefined> }) => void;
   onSkip: () => void;
   onCancel: () => void;
 }
 
-export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel }: Props) {
+export function AvatarPicker({ campaign, sourceKind, mode = "onboarding", onConfirm, onSkip, onCancel }: Props) {
   const slots: CharSlot[] = useMemo(() => {
     const out: CharSlot[] = [
       {
@@ -146,11 +147,15 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 flex-shrink-0">
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] tracking-[0.4em] uppercase" style={{ color: "var(--color-text-dim)" }}>Choose Avatars</div>
+          <div className="text-[10px] tracking-[0.4em] uppercase" style={{ color: "var(--color-text-dim)" }}>
+            {mode === "edit" ? "Edit Avatars" : "Choose Avatars"}
+          </div>
           <h2 className="font-display text-xl mt-0.5 truncate">{campaign.bible.title}</h2>
-          <p className="text-xs mt-1" style={{ color: "var(--color-text-dim)" }}>
-            Canon characters get their portrait from AniList (free). Characters without a match use a procedural sigil.
-          </p>
+          {mode === "onboarding" && (
+            <p className="text-xs mt-1" style={{ color: "var(--color-text-dim)" }}>
+              Canon characters get their portrait from AniList (free). Characters without a match use a procedural sigil.
+            </p>
+          )}
         </div>
         <button onClick={onCancel} className="grid place-items-center w-9 h-9 rounded-lg glass hover:glass-hi transition">
           <X size={16} />
@@ -217,14 +222,14 @@ export function AvatarPicker({ campaign, sourceKind, onConfirm, onSkip, onCancel
           className="text-xs px-4 py-2 rounded-full transition"
           style={{ color: "var(--color-text-dim)" }}
         >
-          Skip — use sigils for everyone
+          {mode === "edit" ? "Clear all to sigils" : "Skip — use sigils for everyone"}
         </button>
         <button
           onClick={confirm}
           className="flex items-center gap-2 px-5 py-2.5 rounded-full edge-neon text-sm font-medium"
           style={{ background: "color-mix(in oklab, var(--color-vermillion) 22%, transparent)", color: "var(--color-paper)" }}
         >
-          Begin <ArrowRight size={14} />
+          {mode === "edit" ? "Save Avatars" : <>Begin <ArrowRight size={14} /></>}
         </button>
       </div>
     </motion.div>

@@ -14,9 +14,11 @@ export function CastView({ open, onClose }: Props) {
   const seen = new Set<string>();
   c?.scenes.forEach((s) => s.panels.forEach((p) => {
     if (p.speaker && p.speaker.length < 30 && !p.speaker.includes(",")) {
-      const cleanSpeaker = p.speaker.trim();
-      const isShortName = cleanSpeaker.split(/\s+/).length <= 4;
-      if (isShortName && cleanSpeaker !== c.protagonist.name) {
+      let cleanSpeaker = p.speaker.replace(/[()[\]"*\n]/g, '').trim();
+      const lower = cleanSpeaker.toLowerCase();
+      const isBadDesc = lower.startsWith("giọng ") || lower.startsWith("tiếng ") || lower.startsWith("âm thanh") || lower.startsWith("cảnh ") || lower.startsWith("bóng ");
+      const isShortName = cleanSpeaker.split(/\s+/).length <= 3;
+      if (cleanSpeaker.length >= 2 && isShortName && !isBadDesc && cleanSpeaker !== c.protagonist.name) {
         seen.add(cleanSpeaker);
       }
     }

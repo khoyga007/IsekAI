@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, Save, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Save, ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import { useCampaign } from "@/state/campaign";
 import { Drawer } from "./Drawer";
 import { useT } from "@/lib/i18n";
 import { suggestPowerLevelFromText } from "@/engine/storyEngine";
+import { AvatarPicker } from "./AvatarPicker";
 import type { HudWidget, WorldBible, Protagonist, PowerLevel } from "@/state/types";
 
 const POWER_LEVELS: { key: PowerLevel; titleKey: string; accent: string }[] = [
@@ -29,6 +30,7 @@ export function WorldEditView({ open, onClose }: Props) {
   const [tab, setTab] = useState<Tab>("bible");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   // Local editable copies
   const [bible, setBible] = useState<WorldBible | null>(null);
@@ -171,6 +173,22 @@ export function WorldEditView({ open, onClose }: Props) {
 
         {tab === "protagonist" && localProto && (
           <motion.div key="proto" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="flex flex-col gap-4">
+            <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-[var(--color-border)]">
+              <div className="flex flex-col">
+                <span className="text-sm font-medium" style={{ color: "var(--color-paper)" }}>Character Avatars</span>
+                <span className="text-[11px]" style={{ color: "var(--color-text-dim)" }}>Edit canon portraits or sigils for the cast</span>
+              </div>
+              <button
+                onClick={() => setShowAvatarPicker(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition hover:opacity-80 font-medium"
+                style={{
+                  background: "color-mix(in oklab, var(--color-vermillion) 18%, transparent)",
+                  color: "var(--color-vermillion)",
+                }}
+              >
+                <ImageIcon size={14} /> Edit Avatars
+              </button>
+            </div>
             <Field label={t("wedit.field.name")}>
               <input value={localProto.name} onChange={(e) => setProtagonist({ ...localProto, name: e.target.value })} className={inputCls} style={inputStyle} />
             </Field>
@@ -205,6 +223,38 @@ export function WorldEditView({ open, onClose }: Props) {
             ))}
             <p className="text-[11px] text-center mt-1" style={{ color: "var(--color-text-dim)" }}>{t("wedit.hud.hint")}</p>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAvatarPicker && c && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4">
+            <AvatarPicker
+              campaign={{ ...c, bible: localBible!, protagonist: localProto! }}
+              sourceKind={c.source.kind}
+              mode="edit"
+              onConfirm={(avatars) => {
+                setProtagonist({ ...localProto!, avatar: avatars.protagonist });
+                if (localBible?.keyCharacters) {
+                  const nextChars = localBible.keyCharacters.map((kc) => ({
+                    ...kc,
+                    avatar: avatars.keyCharacters[kc.name]
+                  }));
+                  setBible({ ...localBible, keyCharacters: nextChars });
+                }
+                setShowAvatarPicker(false);
+              }}
+              onSkip={() => {
+                setProtagonist({ ...localProto!, avatar: undefined });
+                if (localBible?.keyCharacters) {
+                  const nextChars = localBible.keyCharacters.map((kc) => ({ ...kc, avatar: undefined }));
+                  setBible({ ...localBible, keyCharacters: nextChars });
+                }
+                setShowAvatarPicker(false);
+              }}
+              onCancel={() => setShowAvatarPicker(false)}
+            />
+          </div>
         )}
       </AnimatePresence>
     </Drawer>
